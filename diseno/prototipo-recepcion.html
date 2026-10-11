@@ -1,0 +1,1014 @@
+<title>Prototipo de telas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: herramienta de almacén. Barra fija arriba con los módulos en orden (artículos, proveedores, recepciones); una columna de trabajo. */
+:root {
+  --bg: #F3F5F8;
+  --surface: #FFFFFF;
+  --surface-2: #EEF1F5;
+  --ink: #172030;
+  --muted: #586377;
+  --line: #D9DEE6;
+  --accent: #1D4F8F;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E2EAF5;
+  --ok: #1B7447;   --ok-soft: #E0F2E8;
+  --warn: #8C5A00; --warn-soft: #FBEFD6;
+  --bad: #A8261E;  --bad-soft: #FBE4E1;
+  --off: #5F6878;  --off-soft: #E9ECF0;
+  --paper: #FFFFFF; --paper-ink: #000000;   /* la etiqueta es papel térmico: igual en ambos temas */
+  --shadow: 0 1px 2px rgba(23,32,48,.06), 0 4px 16px rgba(23,32,48,.06);
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F131A; --surface: #161C26; --surface-2: #1C2430; --ink: #E5E9F0; --muted: #9BA5B6; --line: #2A3343;
+  --accent: #82A9E2; --accent-ink: #0F131A; --accent-soft: #1C2B42;
+  --ok: #5DC28F; --ok-soft: #15301F; --warn: #E2B25A; --warn-soft: #33270F; --bad: #F08B80; --bad-soft: #3A1A17;
+  --off: #A3ACBB; --off-soft: #232A35; --shadow: 0 1px 2px rgba(0,0,0,.3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0F131A; --surface: #161C26; --surface-2: #1C2430; --ink: #E5E9F0; --muted: #9BA5B6; --line: #2A3343;
+  --accent: #82A9E2; --accent-ink: #0F131A; --accent-soft: #1C2B42;
+  --ok: #5DC28F; --ok-soft: #15301F; --warn: #E2B25A; --warn-soft: #33270F; --bad: #F08B80; --bad-soft: #3A1A17;
+  --off: #A3ACBB; --off-soft: #232A35; --shadow: 0 1px 2px rgba(0,0,0,.3); color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+button, input, select, textarea { font: inherit; color: inherit }
+h1, h2, h3 { text-wrap: balance; margin: 0 }
+.mono, .code { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* Barra superior */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-in { max-width: 1180px; margin: 0 auto; padding: 10px 16px 0; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0 }
+.brand b { font: 700 20px/1 var(--f-display); letter-spacing: .02em; text-transform: uppercase }
+.proto { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 99px; white-space: nowrap }
+.scan { flex: 1 1 240px; display: flex; gap: 6px; min-width: 0 }
+.scan input { flex: 1; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); font-family: var(--f-mono) }
+.who { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted) }
+.who select { padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); max-width: 100% }
+.tabs { max-width: 1180px; margin: 0 auto; padding: 8px 16px 0; display: flex; gap: 4px; overflow-x: auto }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px 9px; cursor: pointer; font-weight: 500; color: var(--muted); white-space: nowrap; display: flex; gap: 8px; align-items: center }
+.tab[aria-current="page"] { color: var(--ink); border-color: var(--accent) }
+.tab .n { font-size: 11px; background: var(--surface-2); border-radius: 99px; padding: 0 7px; color: var(--muted) }
+.tab .step { font: 600 11px/1 var(--f-mono); color: var(--muted) }
+
+main { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 80px; display: grid; gap: 18px }
+
+/* Piezas comunes */
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: var(--r); cursor: pointer; font-weight: 500; white-space: nowrap; text-decoration: none; display: inline-block }
+.btn:hover { border-color: var(--accent) }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.btn.danger { color: var(--bad); border-color: var(--bad) }
+.btn.small { padding: 4px 10px; font-size: 13px }
+.btn[disabled] { opacity: .45; cursor: not-allowed }
+.link.mono { white-space: nowrap }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0 }
+.card h2 { font: 600 15px/1.3 var(--f-body); margin-bottom: 4px }
+.card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; white-space: nowrap }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor }
+.pill.plain::before { display: none }
+.s-info { color: var(--accent); background: var(--accent-soft) }
+.s-ok { color: var(--ok); background: var(--ok-soft) }
+.s-warn { color: var(--warn); background: var(--warn-soft) }
+.s-bad { color: var(--bad); background: var(--bad-soft) }
+.s-off { color: var(--off); background: var(--off-soft) }
+.note { font-size: 13px; color: var(--muted) }
+.banner { border-radius: var(--r); padding: 10px 14px; font-size: 13px; margin: 0 }
+.banner.warn { background: var(--warn-soft); color: var(--ink); border-left: 3px solid var(--warn) }
+.banner.bad { background: var(--bad-soft); color: var(--ink); border-left: 3px solid var(--bad) }
+.banner.ok { background: var(--ok-soft); color: var(--ink); border-left: 3px solid var(--ok) }
+.banner.info { background: var(--accent-soft); color: var(--ink); border-left: 3px solid var(--accent) }
+
+.tablewrap { overflow-x: auto; margin-inline: -4px }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle }
+tr:last-child td { border-bottom: 0 }
+tr.click { cursor: pointer }
+tr.click:hover td { background: var(--surface-2) }
+tr.off td { color: var(--muted) }
+.neg { color: var(--bad) } .pos { color: var(--warn) } .zero { color: var(--ok) }
+
+.page-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between }
+.page-head h1 { font: 700 30px/1.05 var(--f-display); letter-spacing: .01em }
+.page-head p { margin: 4px 0 0; color: var(--muted); max-width: 64ch }
+.counts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.empty { text-align: center; padding: 34px 18px; display: grid; gap: 10px; justify-items: center }
+.empty h2 { font: 700 22px/1.1 var(--f-display) }
+.empty p { margin: 0; color: var(--muted); max-width: 52ch }
+
+/* Formularios */
+.form { display: grid; gap: 14px }
+.field { display: grid; gap: 4px; min-width: 0; align-content: start }
+.field label, .field .lbl { font-size: 12px; font-weight: 500; color: var(--muted) }
+.field input, .field select, .field textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg) }
+.field .hint { font-size: 12px; color: var(--muted) }
+.field .big { font: 500 26px/1.1 var(--f-mono); padding: 10px 12px; letter-spacing: .02em }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; width: max-content; max-width: 100% }
+.seg button { border: 0; background: var(--surface); padding: 9px 18px; cursor: pointer; font-weight: 500 }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+.colores td { padding: 6px 6px }
+.colores input, .colores select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg) }
+.colores input.up { text-transform: uppercase; font-family: var(--f-mono) }
+.colores .w-color { min-width: 150px } .colores .w-cod { min-width: 140px } .colores .w-abr { min-width: 96px; width: 110px } .colores .w-prev { min-width: 170px }
+.form-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between }
+.art { min-width: 170px }
+.grupo-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; justify-content: space-between; margin-bottom: 8px }
+.grupo-head h2 { font: 700 22px/1.1 var(--f-display); margin: 0 }
+.lock { font-size: 11px; color: var(--muted) }
+
+/* Recepción */
+.rec-head { display: grid; gap: 14px }
+.rec-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px }
+.rec-title h1 { font: 700 34px/1 var(--f-display); letter-spacing: .01em }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 20px; margin: 0 }
+.facts div { min-width: 0 }
+.facts dt { font-size: 12px; color: var(--muted) }
+.facts dd { margin: 0; font-weight: 500; overflow-wrap: anywhere }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px }
+.steps li { border-top: 4px solid var(--line); padding-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.3 }
+.steps li.done { border-color: var(--ok); color: var(--ink) }
+.steps li.now { border-color: var(--accent); color: var(--ink); font-weight: 600 }
+.steps small { display: block; font-weight: 400; color: var(--muted) }
+.next { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: var(--r); padding: 12px 14px }
+.next p { margin: 0; min-width: 0; flex: 1 1 280px }
+.next .acts { display: flex; flex-wrap: wrap; gap: 8px }
+.grid2 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: start }
+.next-code { font-size: 13px; color: var(--muted) }
+.next-code b { font-family: var(--f-mono); color: var(--ink); font-weight: 500 }
+.bar { height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; min-width: 60px }
+.bar i { display: block; height: 100%; background: var(--accent) }
+.bar i.full { background: var(--ok) }
+.decide { display: grid; gap: 12px }
+.decide textarea { min-height: 70px; resize: vertical }
+.acts-row { display: flex; flex-wrap: wrap; gap: 8px }
+
+/* Etiqueta 100 x 150 mm */
+.label {
+  width: 100%; max-width: 300px; aspect-ratio: 100 / 150; background: var(--paper); color: var(--paper-ink);
+  border: 1px solid #c9ccd1; border-radius: 3px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px;
+  font-family: var(--f-body); box-shadow: var(--shadow); container-type: inline-size;
+}
+.label .l-top { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; border-bottom: 2px solid var(--paper-ink); padding-bottom: 5px; gap: 6px }
+.label .l-code { font: 700 clamp(18px, 10.5cqi, 31px)/1 var(--f-display); letter-spacing: .01em; text-align: center; white-space: nowrap }
+.label .l-qr { flex: 1; display: grid; place-items: center; min-height: 0 }
+.label .l-qr svg { width: auto; height: 100%; max-height: 170px; max-width: 100%; display: block }
+.label .l-art { font-size: 11px; line-height: 1.25; border-top: 2px solid var(--paper-ink); padding-top: 6px }
+.label .l-art b { font-family: var(--f-mono); font-size: 12px }
+.label .l-kg { display: flex; justify-content: space-between; align-items: baseline; gap: 6px }
+.label .l-kg span { font-size: 9px; letter-spacing: .08em; text-transform: uppercase }
+.label .l-kg strong { font: 700 clamp(22px, 13cqi, 38px)/1 var(--f-display) }
+.label .l-foot { display: flex; justify-content: space-between; font-size: 10px; border-top: 1px solid var(--paper-ink); padding-top: 5px; gap: 6px }
+
+/* Ventana */
+.scrim { position: fixed; inset: 0; background: rgba(10,14,20,.55); z-index: 40; display: grid; place-items: center; padding: 16px; overflow-y: auto }
+.dialog { background: var(--surface); border-radius: 12px; max-width: 760px; width: 100%; padding: 20px; display: grid; gap: 16px; box-shadow: var(--shadow); max-height: calc(100vh - 32px); overflow-y: auto }
+.dialog-head { display: flex; justify-content: space-between; gap: 12px; align-items: start }
+.dialog-head h2 { font: 700 24px/1.1 var(--f-display) }
+.label-view { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start }
+.cedula { white-space: pre-wrap; background: var(--surface-2); border-radius: var(--r); padding: 10px 12px; font: 13px/1.5 var(--f-mono); margin: 6px 0 12px; overflow-wrap: anywhere }
+.stack { display: grid; gap: 10px; min-width: 0 }
+@media (max-width: 640px) { .label-view { grid-template-columns: minmax(0, 1fr) } .label { margin: 0 auto } .steps { grid-template-columns: repeat(5, minmax(56px, 1fr)); overflow-x: auto } }
+
+.ficha { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); align-items: start }
+@media (max-width: 760px) { .ficha { grid-template-columns: minmax(0, 1fr) } }
+.events td:first-child { white-space: nowrap; color: var(--muted) }
+.foot { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 14px }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; max-width: min(560px, calc(100% - 32px)); padding: 10px 16px; border-radius: var(--r); background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: var(--shadow) }
+.toast.error { background: var(--bad); color: #fff }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: up .18s ease-out } @keyframes up { from { transform: translate(-50%, 8px); opacity: 0 } } }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>Sistema para telas</b><span class="proto">Prototipo</span></div>
+    <form class="scan" id="scan-form" role="search">
+      <input id="scan" placeholder="Escanea o escribe un código de rollo" aria-label="Código de rollo" autocomplete="off">
+      <button class="btn" type="submit">Abrir</button>
+    </form>
+    <label class="who" for="user">Viendo como
+      <select id="user"></select>
+    </label>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Módulos"></nav>
+</header>
+
+<main id="app"></main>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+"use strict";
+// ---------------------------------------------------------------- Personas y permisos de ejemplo
+const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"];
+const USERS = {
+  admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
+  ana:    { nombre: "Ana Pérez",  rol: "Responsable de recepción", permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "etiqueta.imprimir"] },
+  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "etiqueta.imprimir"] },
+  luis:   { nombre: "Luis Mora",  rol: "Gerente",                  permisos: ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
+};
+const UN = {
+  kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
+  m:  { nombre: "Metro", corto: "m",  campo: "Metraje",   tope: 150 },
+};
+const UBIC = ["Muelle de recepción", "A-01", "A-02", "A-03", "B-01", "B-02"];
+const DOCS = ["Factura", "Orden de compra", "Lista de empaque"];
+const EST_REC = {
+  en_preparacion:         ["En registro", "s-info", "Registrar rollos"],
+  pendiente_verificacion: ["Por verificar", "s-info", "Revisar y enviar al gerente"],
+  pendiente_autorizacion: ["Esperando al gerente", "s-warn", "Aprobar o rechazar"],
+  verificada:             ["Aprobada, por liberar", "s-warn", "Liberar rollos"],
+  cerrada:                ["Cerrada", "s-ok", "Nada"],
+  rechazada:              ["Rechazada", "s-bad", "Nada"],
+};
+const EST_PIEZA = {
+  en_cuarentena:          ["En cuarentena", "s-warn"],
+  pendiente_autorizacion: ["Con incidencia", "s-bad"],
+  liberada:               ["Liberada", "s-ok"],
+  rechazada:              ["Rechazada", "s-bad"],
+  anulada:                ["Anulada", "s-off"],
+};
+const EVENTO = {
+  registrada: "Registrado en recepción", etiqueta: "Etiqueta impresa", incidencia: "Incidencia registrada",
+  incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado al inventario",
+  rechazada: "Rechazado", anulada: "Anulado",
+};
+
+// ---------------------------------------------------------------- Estado (solo en este navegador)
+const CLAVE = "telas-prototipo-v2";
+const D = { articulos: [], proveedores: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0 } };
+const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
+            artForm: null, provForm: null, recForm: null,
+            form: { art: "", peso: "", fab: "", ubic: "A-01" }, motivo: "", sel: {} };
+function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
+function cargar() { try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {} }
+
+// ---------------------------------------------------------------- Utilidades
+function hoyISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
+function ymd(f) { return f.replaceAll("-", "") }
+function dmy(f) { const [y, m, d] = f.split("-"); return `${d}/${m}/${y}` }
+function ahora() { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` }
+function hoy() { return `${dmy(hoyISO())} ${ahora()}` }
+function n2(n) { return Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function cant(n, un) { return `${n2(n)} ${UN[un].corto}` }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]) }
+function u() { return USERS[S.user] }
+function puede(p) { return u().permisos.includes(p) }
+function art(id) { return D.articulos.find(a => a.id === id) }
+function prov(id) { return D.proveedores.find(p => p.id === id) }
+function recById(id) { return D.recs.find(r => r.id === id) }
+function piezasDe(r) { return D.piezas.filter(p => p.rec === r.id) }
+function nombreArt(a) { return `${a.tela} ${a.color}` }
+function quien(id) { return USERS[id]?.nombre || id }
+function decimal(txt) { return /^\d+([.,]\d{1,2})?$/.test(String(txt).trim()) ? Number(String(txt).trim().replace(",", ".")) : NaN }
+function porUnidad(items, f) {
+  const t = {}; items.forEach(x => { t[x.un] = (t[x.un] || 0) + f(x) });
+  return Object.entries(t).map(([k, v]) => cant(Math.round(v * 100) / 100, k)).join(" · ") || "—";
+}
+
+class Regla extends Error {}
+function exigir(p) { if (!puede(p)) throw new Regla(`${u().nombre} (${u().rol}) no tiene permiso para esta acción.`) }
+
+// ---------------------------------------------------------------- Módulo 1 · Artículos
+function sinAcentos(t) { return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase() }
+function iniciales(txt, n) { return sinAcentos(txt).split(/[^A-Z0-9]+/).filter(Boolean).map(w => w[0]).join("").slice(0, n) }
+function letras(txt) { return sinAcentos(txt).replace(/[^A-Z0-9]/g, "") }
+function abrUsadas(excluirFila) {
+  const s = new Set(D.articulos.map(a => a.abr));
+  (S.artForm?.filas || []).forEach((f, i) => { if (i !== excluirFila && f.abr) s.add(f.abr) });
+  return s;
+}
+function sugerirAbr(tela, color, fila) {
+  const base = iniciales(tela, 3), col = letras(color);
+  if (!base || !col) return "";
+  const usadas = abrUsadas(fila);
+  for (let k = 1; k <= col.length && base.length + k <= 6; k++) { const c = base + col.slice(0, k); if (!usadas.has(c)) return c }
+  for (let d = 2; d < 10; d++) { const c = (base + col[0]).slice(0, 5) + d; if (!usadas.has(c)) return c }
+  return "";
+}
+function nuevaFila() { return { color: "", codigo: "", abr: "", abrTocada: false } }
+function abrirFormArticulo(desde) {
+  const a = desde && art(desde);
+  S.artForm = { tela: a ? a.tela : "", unidad: a ? a.un : "kg", ancho: a?.ancho ? String(a.ancho) : "", comp: a?.comp || "",
+                tope: a ? String(a.tope).replace(".", ",") : "", fija: !!a, filas: [nuevaFila(), nuevaFila()] };
+}
+const ACC_ART = {
+  guardar() {
+    exigir("catalogo.editar");
+    const f = S.artForm, tela = f.tela.trim().replace(/\s+/g, " ");
+    if (!tela) throw new Regla("Escribe el nombre de la tela, por ejemplo Microfibra unicolor.");
+    const otra = D.articulos.find(a => a.tela.toLowerCase() === tela.toLowerCase());
+    if (otra && !f.fija) throw new Regla(`${otra.tela} ya existe. Usa “Agregar colores” en esa tela para que todos sus colores compartan unidad y ancho.`);
+    const tope = f.tope.trim() ? decimal(f.tope) : UN[f.unidad].tope;
+    if (!(tope > 0)) throw new Regla("El tope por rollo debe ser un número mayor que cero, con hasta 2 decimales.");
+    const ancho = f.ancho.trim() ? decimal(f.ancho) : null;
+    if (f.ancho.trim() && !(ancho > 0)) throw new Regla("El ancho es un número en centímetros, por ejemplo 150.");
+    const filas = f.filas.filter(x => x.color.trim() || x.codigo.trim());
+    if (!filas.length) throw new Regla("Agrega al menos un color con su código.");
+    const codigos = new Set(D.articulos.map(a => a.codigo)), abrs = new Set(D.articulos.map(a => a.abr));
+    const colores = new Set(D.articulos.filter(a => a.tela.toLowerCase() === tela.toLowerCase()).map(a => a.color.toLowerCase()));
+    filas.forEach(x => {
+      const n = `Fila ${f.filas.indexOf(x) + 1}`, cod = x.codigo.trim().toUpperCase(), ab = x.abr.trim().toUpperCase();
+      if (!x.color.trim()) throw new Regla(`${n}: falta el color.`);
+      if (colores.has(x.color.trim().toLowerCase())) throw new Regla(`${tela} ${x.color.trim()} ya existe en el catálogo.`);
+      if (!/^[A-Z0-9_-]{2,20}$/.test(cod)) throw new Regla(`${n}: el código lleva de 2 a 20 letras, números, guion o guion bajo, sin espacios.`);
+      if (codigos.has(cod)) throw new Regla(`El código ${cod} ya está usado. Cada artículo tiene un código único.`);
+      if (!/^[A-Z0-9]{2,6}$/.test(ab)) throw new Regla(`${n}: la abreviatura lleva de 2 a 6 letras o números.`);
+      if (abrs.has(ab)) throw new Regla(`La abreviatura ${ab} ya está usada. Debe ser única porque va dentro del código de cada rollo.`);
+      colores.add(x.color.trim().toLowerCase()); codigos.add(cod); abrs.add(ab);
+    });
+    filas.forEach(x => D.articulos.push({
+      id: "a" + (++D.sec.art), tela: otra ? otra.tela : tela, color: x.color.trim().replace(/^./, c => c.toUpperCase()),
+      codigo: x.codigo.trim().toUpperCase(), abr: x.abr.trim().toUpperCase(), un: f.unidad, ancho, comp: f.comp.trim(), tope, activo: true, usada: false }));
+    S.artForm = null;
+    return `${filas.length === 1 ? "1 artículo creado" : `${filas.length} artículos creados`} en ${otra ? otra.tela : tela}. Ya se pueden usar en una recepción.`;
+  },
+  activar(a) { exigir("catalogo.editar"); a.activo = !a.activo; return a.activo ? `${a.codigo} activo de nuevo.` : `${a.codigo} desactivado: no aparece en recepciones nuevas.` },
+};
+
+function vistaArticulos() {
+  const editar = puede("catalogo.editar"), grupos = {};
+  D.articulos.forEach(a => (grupos[a.tela] ||= []).push(a));
+  const telas = Object.keys(grupos).sort((x, y) => x.localeCompare(y, "es"));
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 1 · Catálogo</div><h1>Artículos</h1>
+      <p>Cada color de una tela es un artículo con su propio código y su abreviatura. La abreviatura va dentro del código de cada rollo, por ejemplo ${ymd(hoyISO())}-<b>MUB</b>-001.</p></div>
+    <div class="counts">${editar && !S.artForm ? `<button class="btn primary" data-act="art-nuevo">Nueva tela con sus colores</button>` : ""}</div>
+  </section>
+  ${S.artForm ? formArticulo() : ""}
+  ${!D.articulos.length && !S.artForm ? `<section class="card empty">
+      <h2>Todavía no hay artículos</h2>
+      <p>Empieza aquí. Crea la tela (por ejemplo Microfibra unicolor), di si se controla por kilo o por metro y agrega todos sus colores con sus códigos.</p>
+      ${editar ? `<button class="btn primary" data-act="art-nuevo">Crear la primera tela</button>` : `<p class="note">Los artículos los crea el administrador o el gerente.</p>`}
+      <button class="link" data-act="ejemplo">O cargar un ejemplo para probar</button></section>` : ""}
+  ${telas.map(t => { const g = grupos[t], a0 = g[0]; return `
+  <section class="card">
+    <div class="grupo-head"><h2>${esc(t)}</h2>
+      <div class="counts"><span class="pill plain s-info">Por ${UN[a0.un].nombre.toLowerCase()}</span>
+        ${a0.ancho ? `<span class="note">${String(a0.ancho).replace(".", ",")} cm de ancho</span>` : ""}${a0.comp ? `<span class="note">${esc(a0.comp)}</span>` : ""}
+        ${editar && !S.artForm ? `<button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar colores</button>` : ""}</div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Color</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
+        <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
+        <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
+        <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
+        <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
+        <td>${editar ? `<button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}
+      </tbody></table></div>
+  </section>` }).join("")}`;
+}
+
+function formArticulo() {
+  const f = S.artForm, ro = f.fija ? "readonly" : "";
+  return `<section class="card">
+    <h2>${f.fija ? `Agregar colores a ${esc(f.tela)}` : "Nueva tela con sus colores"}</h2>
+    <p class="sub">Lo común a la tela se escribe una vez; abajo va una fila por color. La unidad decide cómo se recibe, se etiqueta y se cuadra cada rollo.</p>
+    <form class="form" id="art-form">
+      <div class="row2">
+        <div class="field"><label for="af-tela">Tela</label>
+          <input id="af-tela" data-af="tela" value="${esc(f.tela)}" placeholder="Ej. Microfibra unicolor" autocomplete="off" ${ro}></div>
+        <div class="field"><span class="lbl" id="lbl-un">Se controla por</span>
+          <div class="seg" role="group" aria-labelledby="lbl-un">
+            ${["kg", "m"].map(k => `<button type="button" data-act="af-unidad" data-un="${k}" aria-pressed="${f.unidad === k}" ${f.fija ? "disabled" : ""}>${UN[k].nombre}</button>`).join("")}</div>
+          <span class="hint">${f.unidad === "kg" ? "Se pesa cada rollo y la etiqueta dice el peso neto en kg." : "Se mide cada rollo y la etiqueta dice el metraje en m."}</span></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="af-ancho">Ancho en cm (opcional)</label><input id="af-ancho" data-af="ancho" inputmode="decimal" value="${esc(f.ancho)}" placeholder="Ej. 150" ${ro}></div>
+        <div class="field"><label for="af-comp">Composición (opcional)</label><input id="af-comp" data-af="comp" value="${esc(f.comp)}" placeholder="Ej. 100% poliéster" ${ro}></div>
+        <div class="field"><label for="af-tope">Tope por rollo (${UN[f.unidad].corto})</label><input id="af-tope" data-af="tope" inputmode="decimal" value="${esc(f.tope)}" placeholder="${UN[f.unidad].tope}" ${ro}>
+          <span class="hint">Avisa si alguien teclea ${f.unidad === "kg" ? "252,4 en vez de 25,24" : "500 en vez de 50,0"}.</span></div>
+      </div>
+      <div class="tablewrap"><table class="colores">
+        <thead><tr><th>Color</th><th>Código del artículo</th><th>Abreviatura</th><th>Así saldrá cada rollo</th><th></th></tr></thead>
+        <tbody>${f.filas.map((x, i) => `<tr>
+          <td class="w-color"><input data-row="${i}" data-col="color" value="${esc(x.color)}" placeholder="Ej. Blanco" aria-label="Color, fila ${i + 1}" autocomplete="off"></td>
+          <td class="w-cod"><input class="up" data-row="${i}" data-col="codigo" value="${esc(x.codigo)}" placeholder="Ej. MFU-001" aria-label="Código, fila ${i + 1}" autocomplete="off"></td>
+          <td class="w-abr"><input class="up" data-row="${i}" data-col="abr" value="${esc(x.abr)}" maxlength="6" aria-label="Abreviatura, fila ${i + 1}" autocomplete="off"></td>
+          <td class="w-prev mono note" id="prev-${i}">${x.abr ? `${ymd(hoyISO())}-${esc(x.abr)}-001` : ""}</td>
+          <td>${f.filas.length > 1 ? `<button type="button" class="btn small" data-act="af-quitar" data-row="${i}" aria-label="Quitar fila ${i + 1}">Quitar</button>` : ""}</td></tr>`).join("")}
+        </tbody></table></div>
+      <div class="form-foot">
+        <button type="button" class="btn" data-act="af-fila">Agregar otro color</button>
+        <div class="acts-row"><button type="button" class="btn" data-act="af-cancelar">Cancelar</button><button type="submit" class="btn primary">Guardar artículos</button></div>
+      </div>
+      <p class="note" style="margin:0">La abreviatura se propone sola con las iniciales de la tela y el color; puedes cambiarla. Cuando un artículo ya tiene rollos recibidos, su abreviatura y su unidad quedan fijas.</p>
+    </form></section>`;
+}
+function refrescarSugerencias() {
+  const f = S.artForm; if (!f) return;
+  f.filas.forEach((x, i) => {
+    if (!x.abrTocada) {
+      x.abr = sugerirAbr(f.tela, x.color, i);
+      const el = document.querySelector(`[data-row="${i}"][data-col="abr"]`); if (el) el.value = x.abr;
+    }
+    const pv = document.getElementById(`prev-${i}`); if (pv) pv.textContent = x.abr ? `${ymd(hoyISO())}-${x.abr}-001` : "";
+  });
+}
+
+// ---------------------------------------------------------------- Módulo 2 · Proveedores
+const ACC_PROV = {
+  guardar() {
+    exigir("catalogo.editar");
+    const f = S.provForm, cod = f.codigo.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla("El código del proveedor lleva letras, números, guion o guion bajo, sin espacios.");
+    if (!f.nombre.trim()) throw new Regla("Escribe el nombre del proveedor.");
+    if (D.proveedores.some(p => p.codigo === cod)) throw new Regla(`El código ${cod} ya está usado por otro proveedor.`);
+    D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: cod, nombre: f.nombre.trim(), fiscal: f.fiscal.trim(), pais: f.pais.trim(), activo: true });
+    S.provForm = null;
+    return `Proveedor ${f.nombre.trim()} creado.`;
+  },
+};
+function vistaProveedores() {
+  const editar = puede("catalogo.editar"), f = S.provForm;
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 2 · Catálogo</div><h1>Proveedores</h1><p>Quién te vende la tela. Toda recepción sale de un proveedor de esta lista.</p></div>
+    <div class="counts">${editar && !f ? `<button class="btn primary" data-act="prov-nuevo">Nuevo proveedor</button>` : ""}</div>
+  </section>
+  ${f ? `<section class="card"><h2>Nuevo proveedor</h2><p class="sub">El código es corto y no cambia; el nombre puede ser el comercial.</p>
+    <form class="form" id="prov-form"><div class="row2">
+      <div class="field"><label for="pf-codigo">Código</label><input id="pf-codigo" class="mono" data-pf="codigo" value="${esc(f.codigo)}" placeholder="Ej. TEXPAC" autocomplete="off" style="text-transform:uppercase"></div>
+      <div class="field"><label for="pf-nombre">Nombre</label><input id="pf-nombre" data-pf="nombre" value="${esc(f.nombre)}" placeholder="Ej. Textiles del Pacífico" autocomplete="off"></div>
+      <div class="field"><label for="pf-fiscal">Identificación fiscal (opcional)</label><input id="pf-fiscal" data-pf="fiscal" value="${esc(f.fiscal)}" placeholder="Ej. RIF o NIT" autocomplete="off"></div>
+      <div class="field"><label for="pf-pais">País (opcional)</label><input id="pf-pais" data-pf="pais" value="${esc(f.pais)}" placeholder="Ej. China" autocomplete="off"></div></div>
+      <div class="form-foot"><span></span><div class="acts-row"><button type="button" class="btn" data-act="prov-cancelar">Cancelar</button><button type="submit" class="btn primary">Guardar proveedor</button></div></div>
+    </form></section>` : ""}
+  ${!D.proveedores.length && !f ? `<section class="card empty"><h2>Todavía no hay proveedores</h2><p>Crea al menos uno para poder abrir una recepción.</p>
+      ${editar ? `<button class="btn primary" data-act="prov-nuevo">Crear el primer proveedor</button>` : `<p class="note">Los proveedores los crea el administrador o el gerente.</p>`}</section>` : ""}
+  ${D.proveedores.length ? `<section class="card"><div class="tablewrap"><table>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Identificación fiscal</th><th>País</th><th class="num">Recepciones</th></tr></thead>
+    <tbody>${D.proveedores.map(p => `<tr><td class="mono">${esc(p.codigo)}</td><td>${esc(p.nombre)}</td><td>${esc(p.fiscal)}</td><td>${esc(p.pais)}</td><td class="num">${D.recs.filter(r => r.prov === p.id).length}</td></tr>`).join("")}</tbody>
+  </table></div></section>` : ""}`;
+}
+
+// ---------------------------------------------------------------- Módulo 3 · Recepciones
+function siguienteCodigo(fecha, abr, consumir) {
+  const k = ymd(fecha) + abr, n = (D.contador[k] || 0) + 1;
+  if (consumir) D.contador[k] = n;
+  return `${ymd(fecha)}-${abr}-${n < 1000 ? String(n).padStart(3, "0") : n}`;
+}
+function evento(p, tipo, de, a, nota) { p.eventos.push({ hora: hoy(), tipo, de, a, quien: S.user, nota: nota || "" }) }
+
+function cuadre(r) {
+  const ps = piezasDe(r);
+  const lineas = r.lineas.map(l => {
+    const a = art(l.art), vivas = ps.filter(p => p.art === l.art && p.estado !== "anulada");
+    const recibido = Math.round(vivas.reduce((s, p) => s + p.cantidad, 0) * 100) / 100;
+    const dif = Math.round((recibido - l.esperado) * 100) / 100;
+    return { ...l, a, un: a.un, recibido, dif, pct: Math.round(dif * 10000 / l.esperado) / 100,
+             registradas: vivas.length, anuladas: ps.filter(p => p.art === l.art && p.estado === "anulada").length,
+             conIncidencia: vivas.filter(p => p.estado === "pendiente_autorizacion").length };
+  });
+  return { lineas, hayDif: lineas.some(l => l.dif !== 0 || (l.rollos && l.registradas !== l.rollos)),
+           abiertas: r.incidencias.filter(i => i.abierta).length,
+           registradas: lineas.reduce((s, l) => s + l.registradas, 0), rollos: lineas.reduce((s, l) => s + (l.rollos || 0), 0) };
+}
+
+function abrirFormRecepcion() {
+  S.recForm = { prov: D.proveedores[0]?.id || "", docTipo: "Factura", docNum: "", fecha: hoyISO(), lineas: [{ art: "", cant: "", rollos: "" }] };
+}
+const ACC = {
+  crearRecepcion() {
+    exigir("recepcion.crear");
+    const f = S.recForm;
+    if (!prov(f.prov)) throw new Regla("Elige el proveedor.");
+    if (!f.docNum.trim()) throw new Regla("Escribe el número del documento del proveedor.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.fecha)) throw new Regla("Indica la fecha de recepción.");
+    const lineas = f.lineas.filter(l => l.art || l.cant.trim() || l.rollos.trim());
+    if (!lineas.length) throw new Regla("Agrega al menos un artículo facturado.");
+    const vistos = new Set();
+    const ok = lineas.map((l, i) => {
+      const a = art(l.art);
+      if (!a) throw new Regla(`Línea ${i + 1}: elige el artículo.`);
+      if (vistos.has(a.id)) throw new Regla(`${a.codigo} está repetido. Pon cada artículo una sola vez con su total.`);
+      vistos.add(a.id);
+      const c = decimal(l.cant);
+      if (!(c > 0)) throw new Regla(`Línea ${i + 1}: escribe la cantidad facturada en ${UN[a.un].corto}, con hasta 2 decimales.`);
+      const ro = l.rollos.trim() ? Number(l.rollos) : null;
+      if (l.rollos.trim() && !(Number.isInteger(ro) && ro > 0)) throw new Regla(`Línea ${i + 1}: los rollos facturados son un número entero.`);
+      return { art: a.id, esperado: c, rollos: ro };
+    });
+    const r = { id: "r" + (++D.sec.rec), numero: `REC-${String(D.sec.rec).padStart(6, "0")}`, prov: f.prov, doc: `${f.docTipo} ${f.docNum.trim()}`,
+                fecha: f.fecha, estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null };
+    D.recs.push(r);
+    S.recForm = null; S.view = "recepcion"; S.rec = r.id; S.form.art = ok[0].art;
+    return `Recepción ${r.numero} abierta. Ya puedes registrar los rollos.`;
+  },
+  registrar(r) {
+    exigir("recepcion.registrar_pieza");
+    if (r.estado !== "en_preparacion") throw new Regla(`La recepción ${r.numero} ya no admite rollos.`);
+    const f = S.form, a = art(f.art);
+    if (!a || !r.lineas.some(l => l.art === a.id)) throw new Regla("Elige uno de los artículos de esta recepción.");
+    const c = decimal(f.peso), U = UN[a.un];
+    if (!(c > 0)) throw new Regla(`Escribe el ${U.campo.toLowerCase()} con hasta 2 decimales, por ejemplo ${a.un === "kg" ? "25,40" : "50,00"}.`);
+    if (c > a.tope) throw new Regla(`El valor ${cant(c, a.un)} supera el tope de ${cant(a.tope, a.un)} configurado para ${a.abr}. Revisa la cifra.`);
+    let fab = null;
+    if (f.fab.trim()) { fab = decimal(f.fab); if (!(fab > 0)) throw new Regla("El dato de la etiqueta del fabricante admite hasta 2 decimales.") }
+    const p = { codigo: siguienteCodigo(r.fecha, a.abr, true), art: a.id, un: a.un, rec: r.id, cantidad: c, actual: c, fab,
+                estado: "en_cuarentena", ubic: f.ubic, por: S.user, impresiones: 0, eventos: [] };
+    evento(p, "registrada", null, "en_cuarentena");
+    D.piezas.push(p); a.usada = true;
+    S.form.peso = ""; S.form.fab = "";
+    S.modal = { tipo: "etiqueta", codigo: p.codigo, nueva: true };
+    return `Rollo ${p.codigo} guardado. Imprime su etiqueta y pégala en el rollo.`;
+  },
+  imprimir(p) {
+    exigir("etiqueta.imprimir");
+    p.impresiones++;
+    evento(p, "etiqueta", null, null, p.impresiones === 1 ? "Primera impresión" : `Reimpresión n.º ${p.impresiones - 1}`);
+    return p.impresiones === 1 ? "Impresión registrada. En el prototipo no sale a la impresora." : `Reimpresión n.º ${p.impresiones - 1} registrada en el historial.`;
+  },
+  terminar(r) {
+    exigir("recepcion.verificar");
+    if (r.estado !== "en_preparacion") throw new Regla("Solo se cierra el registro de una recepción en registro.");
+    if (!piezasDe(r).some(p => p.estado !== "anulada")) throw new Regla("La recepción no tiene rollos registrados.");
+    r.estado = "pendiente_verificacion";
+    return "Registro cerrado. Revisa el cuadre y envíalo al gerente.";
+  },
+  enviar(r) {
+    exigir("recepcion.verificar");
+    if (r.estado !== "pendiente_verificacion") throw new Regla("La recepción debe estar por verificar.");
+    r.estado = "pendiente_autorizacion"; r.verificadoPor = S.user;
+    return `Enviada al gerente. ${u().nombre} ya no podrá aprobarla (doble control).`;
+  },
+  decidir(r, decision) {
+    exigir("recepcion.aprobar");
+    if (r.estado !== "pendiente_autorizacion") throw new Regla("La recepción no está esperando al gerente.");
+    if (r.verificadoPor === S.user) throw new Regla("Doble control: quien envió la recepción a aprobación no puede aprobarla.");
+    const c = cuadre(r), motivo = S.motivo.trim();
+    if ((decision === "rechazada" || c.hayDif) && !motivo) throw new Regla("Hay diferencias en el cuadre o se rechaza la recepción: indica el motivo.");
+    r.decision = { decision, por: S.user, motivo, hora: hoy() };
+    for (const p of piezasDe(r)) {
+      if (decision === "aprobada" && p.estado === "en_cuarentena") evento(p, "aprobada", p.estado, p.estado, motivo);
+      if (decision === "rechazada" && ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado)) { evento(p, "rechazada", p.estado, "rechazada", motivo); p.estado = "rechazada" }
+    }
+    r.estado = decision === "aprobada" ? "verificada" : "rechazada"; S.motivo = "";
+    return decision === "aprobada" ? "Recepción aprobada. Los rollos siguen en cuarentena hasta que alguien los libere." : "Recepción rechazada. Sus rollos quedan rechazados y sus códigos no se reutilizan.";
+  },
+  liberar(r, todas) {
+    exigir("pieza.liberar");
+    if (r.estado !== "verificada") throw new Regla("Solo se liberan rollos de una recepción aprobada por el gerente.");
+    const objetivo = piezasDe(r).filter(p => p.estado === "en_cuarentena" && (todas || S.sel[p.codigo]));
+    if (!objetivo.length) throw new Regla("Marca al menos un rollo en cuarentena para liberarlo.");
+    objetivo.forEach(p => { p.estado = "liberada"; evento(p, "liberada", "en_cuarentena", "liberada"); delete S.sel[p.codigo] });
+    intentarCerrar(r);
+    return `${objetivo.length} ${objetivo.length === 1 ? "rollo liberado" : "rollos liberados"} al inventario.${r.estado === "cerrada" ? " La recepción quedó cerrada." : ""}`;
+  },
+  incidencia(r, p, desc) {
+    exigir("recepcion.registrar_pieza");
+    if (["cerrada", "rechazada"].includes(r.estado)) throw new Regla(`La recepción ${r.numero} no admite incidencias.`);
+    if (p.estado !== "en_cuarentena") throw new Regla("Solo se registran incidencias sobre rollos en cuarentena.");
+    if (!desc.trim()) throw new Regla("Describe la incidencia.");
+    p.estado = "pendiente_autorizacion";
+    evento(p, "incidencia", "en_cuarentena", "pendiente_autorizacion", desc.trim());
+    r.incidencias.push({ pieza: p.codigo, desc: desc.trim(), por: S.user, abierta: true });
+    return `Incidencia registrada. ${p.codigo} queda apartado hasta que otra persona la resuelva.`;
+  },
+  resolver(r, inc, aceptar) {
+    exigir("pieza.resolver_incidencia");
+    if (!inc.abierta) throw new Regla("La incidencia ya está resuelta.");
+    if (inc.por === S.user) throw new Regla("Doble control: quien registra una incidencia no puede resolverla.");
+    const p = D.piezas.find(x => x.codigo === inc.pieza), a = aceptar ? "en_cuarentena" : "rechazada";
+    evento(p, "incidencia_resuelta", p.estado, a, aceptar ? "Se acepta con la incidencia anotada" : "Se rechaza el rollo");
+    p.estado = a; inc.abierta = false; inc.resolucion = aceptar ? "Aceptado" : "Rechazado"; inc.resueltoPor = S.user;
+    intentarCerrar(r);
+    return aceptar ? `${p.codigo} vuelve a cuarentena con la incidencia anotada.` : `${p.codigo} queda rechazado; su código no se reutiliza.`;
+  },
+  anular(r, p) {
+    exigir("recepcion.anular");
+    if (!["en_preparacion", "pendiente_verificacion"].includes(r.estado)) throw new Regla("Tras enviar la recepción al gerente, los rollos ya no se anulan: se rechazan.");
+    if (!["en_cuarentena", "pendiente_autorizacion"].includes(p.estado)) throw new Regla(`El rollo ${p.codigo} ya está ${EST_PIEZA[p.estado][0].toLowerCase()}.`);
+    evento(p, "anulada", p.estado, "anulada", "Dato mal digitado");
+    p.estado = "anulada";
+    return `${p.codigo} anulado. El código queda quemado: el siguiente rollo recibe un número nuevo.`;
+  },
+};
+function intentarCerrar(r) {
+  if (r.estado === "verificada" && !piezasDe(r).some(p => ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado))) r.estado = "cerrada";
+}
+
+const pillRec = e => `<span class="pill ${EST_REC[e][1]}">${EST_REC[e][0]}</span>`;
+const pillPieza = e => `<span class="pill ${EST_PIEZA[e][1]}">${EST_PIEZA[e][0]}</span>`;
+const difCls = d => d === 0 ? "zero" : d < 0 ? "neg" : "pos";
+const signo = d => (d > 0 ? "+" : d < 0 ? "−" : "") + n2(Math.abs(d));
+
+function vistaRecepciones() {
+  const faltan = [];
+  if (!D.articulos.some(a => a.activo)) faltan.push(`<button class="link" data-act="ir" data-v="articulos">crear artículos</button>`);
+  if (!D.proveedores.length) faltan.push(`<button class="link" data-act="ir" data-v="proveedores">crear un proveedor</button>`);
+  const cuenta = k => D.recs.filter(r => r.estado === k).length;
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 3 · Recepción inicial</div><h1>Recepciones</h1><p>Cada recepción parte del documento del proveedor y solo admite artículos del catálogo.</p></div>
+    <div class="counts">
+      ${D.recs.length ? `<span class="pill s-info">En registro: ${cuenta("en_preparacion") + cuenta("pendiente_verificacion")}</span>
+      <span class="pill s-warn">Esperando al gerente: ${cuenta("pendiente_autorizacion")}</span>` : ""}
+      ${!S.recForm && puede("recepcion.crear") && !faltan.length ? `<button class="btn primary" data-act="rec-nueva">Nueva recepción</button>` : ""}
+    </div>
+  </section>
+  ${faltan.length ? `<p class="banner info">Antes de recibir mercancía hay que ${faltan.join(" y ")}. Todo va atado: la recepción usa los códigos y la unidad de cada artículo.</p>` : ""}
+  ${S.recForm ? formRecepcion() : ""}
+  ${!D.recs.length && !S.recForm ? `<section class="card empty"><h2>Todavía no hay recepciones</h2><p>Abre una con el documento del proveedor: qué artículos facturó, cuántos kilos o metros y cuántos rollos.</p>
+      ${!faltan.length && puede("recepcion.crear") ? `<button class="btn primary" data-act="rec-nueva">Abrir la primera recepción</button>` : ""}</section>` : ""}
+  ${D.recs.length ? `<section class="card"><div class="tablewrap"><table>
+      <thead><tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Documento</th><th class="num">Rollos</th><th class="num">Facturado</th><th class="num">Recibido</th><th>Estado</th><th>Siguiente paso</th></tr></thead>
+      <tbody>${[...D.recs].reverse().map(r => { const c = cuadre(r); return `
+        <tr class="click" data-act="abrir" data-id="${r.id}" tabindex="0">
+          <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}</td>
+          <td class="num">${c.registradas}${c.rollos ? ` / ${c.rollos}` : ""}</td><td class="num">${porUnidad(c.lineas, l => l.esperado)}</td><td class="num">${porUnidad(c.lineas, l => l.recibido)}</td>
+          <td>${pillRec(r.estado)}</td><td class="note">${EST_REC[r.estado][2]}</td></tr>` }).join("")}
+      </tbody></table></div></section>` : ""}`;
+}
+
+function opcionesArticulo(sel) {
+  const g = {}; D.articulos.filter(a => a.activo || a.id === sel).forEach(a => (g[a.tela] ||= []).push(a));
+  return `<option value="">Elige el artículo</option>` + Object.keys(g).sort().map(t => `<optgroup label="${esc(t)} · por ${UN[g[t][0].un].nombre.toLowerCase()}">${g[t].map(a =>
+    `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(a.codigo)} · ${esc(a.color)} (${UN[a.un].corto})</option>`).join("")}</optgroup>`).join("");
+}
+function formRecepcion() {
+  const f = S.recForm;
+  return `<section class="card"><h2>Nueva recepción</h2><p class="sub">Copia lo que dice el documento del proveedor. Contra lo facturado se cuadra lo recibido.</p>
+    <form class="form" id="rec-form">
+      <div class="row2">
+        <div class="field"><label for="rf-prov">Proveedor</label><select id="rf-prov" data-rf="prov">${D.proveedores.map(p => `<option value="${p.id}" ${p.id === f.prov ? "selected" : ""}>${esc(p.nombre)}</option>`).join("")}</select></div>
+        <div class="field"><label for="rf-tipo">Documento</label><select id="rf-tipo" data-rf="docTipo">${DOCS.map(d => `<option ${d === f.docTipo ? "selected" : ""}>${d}</option>`).join("")}</select></div>
+        <div class="field"><label for="rf-num">Número del documento</label><input id="rf-num" data-rf="docNum" value="${esc(f.docNum)}" placeholder="Ej. F-002315" autocomplete="off"></div>
+        <div class="field"><label for="rf-fecha">Fecha de recepción</label><input id="rf-fecha" type="date" data-rf="fecha" value="${f.fecha}"><span class="hint">Va dentro del código de cada rollo.</span></div>
+      </div>
+      <div class="tablewrap"><table class="colores">
+        <thead><tr><th>Artículo facturado</th><th>Cantidad facturada</th><th>Rollos facturados</th><th></th></tr></thead>
+        <tbody>${f.lineas.map((l, i) => { const a = art(l.art); return `<tr>
+          <td style="min-width:240px"><select data-rl="${i}" data-col="art" aria-label="Artículo, línea ${i + 1}">${opcionesArticulo(l.art)}</select></td>
+          <td style="min-width:150px"><div style="display:flex;gap:6px;align-items:center"><input data-rl="${i}" data-col="cant" inputmode="decimal" value="${esc(l.cant)}" placeholder="${a ? (a.un === "kg" ? "Ej. 250,00" : "Ej. 600,00") : ""}" aria-label="Cantidad, línea ${i + 1}"><span class="note" style="width:22px">${a ? UN[a.un].corto : ""}</span></div></td>
+          <td style="min-width:110px"><input data-rl="${i}" data-col="rollos" inputmode="numeric" value="${esc(l.rollos)}" placeholder="Ej. 10" aria-label="Rollos, línea ${i + 1}"></td>
+          <td>${f.lineas.length > 1 ? `<button type="button" class="btn small" data-act="rf-quitar" data-row="${i}">Quitar</button>` : ""}</td></tr>` }).join("")}
+        </tbody></table></div>
+      <div class="form-foot"><button type="button" class="btn" data-act="rf-linea">Agregar otro artículo</button>
+        <div class="acts-row"><button type="button" class="btn" data-act="rf-cancelar">Cancelar</button><button type="submit" class="btn primary">Abrir recepción</button></div></div>
+    </form></section>`;
+}
+
+function pasos(r) {
+  const orden = ["en_preparacion", "pendiente_verificacion", "pendiente_autorizacion", "verificada", "cerrada"];
+  const nombres = [["Registro", "Cada rollo"], ["Verificación", "Responsable revisa"], ["Gerente", "Aprueba con el cuadre"], ["Liberación", "Persona autorizada"], ["Cerrada", "Todo liberado"]];
+  const i = orden.indexOf(r.estado);
+  if (i < 0) return "";
+  return `<ol class="steps" aria-label="Etapas de la recepción">${nombres.map((n, k) =>
+    `<li class="${k < i || r.estado === "cerrada" ? "done" : k === i ? "now" : ""}">${n[0]}<small>${n[1]}</small></li>`).join("")}</ol>`;
+}
+function siguiente(r) {
+  const c = cuadre(r), sin = t => `<span class="note">${t}</span>`;
+  switch (r.estado) {
+    case "en_preparacion": return `<div class="next"><p><b>Registra cada rollo.</b> Llevas ${c.registradas}${c.rollos ? ` de ${c.rollos}` : ""} rollos. Cuando termines, cierra el registro para revisar el cuadre.</p>
+      <div class="acts">${puede("recepcion.verificar") ? `<button class="btn primary" data-act="terminar">Terminar registro</button>` : sin("Cierra el registro el responsable de recepción.")}</div></div>`;
+    case "pendiente_verificacion": return `<div class="next"><p><b>Revisa el cuadre y envíalo al gerente.</b> Toda recepción pasa por el gerente, cuadre o no. Quien la envíe no podrá aprobarla.</p>
+      <div class="acts">${puede("recepcion.verificar") ? `<button class="btn primary" data-act="enviar">Enviar al gerente</button>` : sin("La envía el responsable de recepción.")}</div></div>`;
+    case "pendiente_autorizacion": return `<div class="next"><p><b>Esperando la decisión del gerente.</b> Enviada por ${quien(r.verificadoPor)}. ${c.hayDif ? "El cuadre tiene diferencias: aprobar exige escribir el motivo." : "El cuadre coincide."}</p>
+      <div class="acts">${puede("recepcion.aprobar") ? `<a class="btn primary" href="#decision" data-act="ir-a" data-to="decision">Ir a la decisión</a>` : sin("Decide el gerente.")}</div></div>`;
+    case "verificada": return `<div class="next"><p><b>Aprobada por ${quien(r.decision?.por)}.</b> Los rollos siguen en cuarentena: no se venden ni se separan hasta que una persona autorizada los libere.</p>
+      <div class="acts">${puede("pieza.liberar") ? `<a class="btn primary" href="#liberar" data-act="ir-a" data-to="liberar">Ir a liberar</a>` : sin("Libera el gerente.")}</div></div>`;
+    case "cerrada": return `<div class="banner ok">Recepción cerrada. Aprobada por ${quien(r.decision?.por)} el ${r.decision?.hora}. Todos sus rollos están liberados o resueltos.</div>`;
+    case "rechazada": return `<div class="banner bad">Rechazada por ${quien(r.decision?.por)}: ${esc(r.decision?.motivo)}. Los rollos quedan rechazados y sus códigos no se reutilizan.</div>`;
+  }
+  return "";
+}
+function tablaCuadre(r) {
+  const c = cuadre(r);
+  return `<div class="card">
+    <h2>Cuadre de recepción</h2>
+    <p class="sub">Lo facturado frente a lo recibido, por artículo y en su unidad. Sin tolerancia: cualquier diferencia se muestra y la decide el gerente.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Artículo</th><th class="num">Facturado</th><th class="num">Recibido</th><th class="num">Diferencia</th><th class="num">%</th><th>Rollos</th></tr></thead>
+      <tbody>${c.lineas.map(l => `<tr>
+        <td class="art"><span class="mono">${l.a.abr}</span> · ${esc(nombreArt(l.a))}${l.conIncidencia ? `<br><span class="note">${l.conIncidencia} con incidencia</span>` : ""}${l.anuladas ? `<br><span class="note">${l.anuladas} anulado${l.anuladas > 1 ? "s" : ""}, fuera del total</span>` : ""}</td>
+        <td class="num">${cant(l.esperado, l.un)}</td><td class="num">${cant(l.recibido, l.un)}</td>
+        <td class="num ${difCls(l.dif)}">${signo(l.dif)} ${UN[l.un].corto}</td><td class="num ${difCls(l.dif)}">${(l.pct > 0 ? "+" : "") + String(l.pct).replace(".", ",")}</td>
+        <td>${l.rollos ? `<div style="display:flex;align-items:center;gap:8px"><span class="num ${l.registradas === l.rollos ? "" : "pos"}">${l.registradas}/${l.rollos}</span>
+          <div class="bar" style="flex:1"><i class="${l.registradas >= l.rollos ? "full" : ""}" style="width:${Math.min(100, l.registradas * 100 / l.rollos)}%"></i></div></div>` : `<span class="num">${l.registradas}</span>`}</td></tr>`).join("")}
+      </tbody></table></div>
+    ${c.abiertas ? `<p class="banner warn" style="margin-top:12px">${c.abiertas} incidencia${c.abiertas > 1 ? "s" : ""} abierta${c.abiertas > 1 ? "s" : ""}: esos rollos no se liberan hasta resolverlas.</p>` : ""}
+  </div>`;
+}
+function formRegistro(r) {
+  const ok = puede("recepcion.registrar_pieza"), f = S.form;
+  if (!r.lineas.some(l => l.art === f.art)) f.art = r.lineas[0].art;
+  const a = art(f.art), U = UN[a.un];
+  return `<div class="card">
+    <h2>Registrar rollo</h2>
+    <p class="sub">${a.un === "kg" ? "Pesa el rollo" : "Mide el rollo"} y escribe el dato. Al guardar se crea su código único y su etiqueta.</p>
+    <form class="form" id="reg">
+      <div class="field"><label for="f-art">Artículo</label>
+        <select id="f-art" ${ok ? "" : "disabled"}>${r.lineas.map(l => { const x = art(l.art); return `<option value="${x.id}" ${x.id === f.art ? "selected" : ""}>${x.abr} · ${esc(nombreArt(x))} (por ${UN[x.un].nombre.toLowerCase()})</option>` }).join("")}</select></div>
+      <div class="field"><label for="f-peso">${U.campo} (${U.corto})</label>
+        <input id="f-peso" class="big" inputmode="decimal" placeholder="${a.un === "kg" ? "Ej. 25,40" : "Ej. 50,00"}" value="${esc(f.peso)}" ${ok ? "" : "disabled"} autocomplete="off"></div>
+      <div class="row2">
+        <div class="field"><label for="f-fab">${U.campo} en etiqueta del fabricante (opcional)</label>
+          <input id="f-fab" inputmode="decimal" placeholder="Opcional" value="${esc(f.fab)}" ${ok ? "" : "disabled"} autocomplete="off"></div>
+        <div class="field"><label for="f-ubic">Ubicación</label>
+          <select id="f-ubic" ${ok ? "" : "disabled"}>${UBIC.map(x => `<option ${x === f.ubic ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+      </div>
+      <div class="form-foot">
+        <span class="next-code">Código que recibirá: <b>${siguienteCodigo(r.fecha, a.abr, false)}</b></span>
+        ${ok ? `<button class="btn primary" type="submit">Guardar y generar etiqueta</button>` : `<span class="note">${u().nombre} no registra rollos.</span>`}
+      </div>
+      <p class="note" style="margin:0">El dato no se reparte entre rollos ni se corrige después: si te equivocas, el gerente anula el rollo y se registra de nuevo con otro código.</p>
+    </form></div>`;
+}
+function panelDecision(r) {
+  if (r.estado !== "pendiente_autorizacion" || !puede("recepcion.aprobar")) return "";
+  const c = cuadre(r), mismo = r.verificadoPor === S.user;
+  return `<div class="card" id="decision">
+    <h2>Decisión del gerente</h2>
+    <p class="sub">Revisas el cuadre de arriba y decides. La decisión queda guardada con el cuadre tal como lo viste.</p>
+    <div class="decide">
+      ${mismo ? `<div class="banner bad">Doble control: tú enviaste esta recepción, así que no puedes aprobarla. Cambia de persona arriba.</div>` : ""}
+      ${c.hayDif ? `<div class="banner warn">Hay diferencias entre lo facturado y lo recibido. Para aprobar o rechazar tienes que escribir el motivo.</div>` : `<div class="banner ok">El cuadre coincide en cantidad y en número de rollos.</div>`}
+      <div class="field"><label for="motivo">Motivo ${c.hayDif ? "(obligatorio)" : "(obligatorio solo si rechazas)"}</label>
+        <textarea id="motivo" placeholder="Ej.: Se acepta la diferencia; se reclamará nota de crédito al proveedor.">${esc(S.motivo)}</textarea></div>
+      <div class="acts-row"><button class="btn primary" data-act="aprobar">Aprobar recepción</button><button class="btn danger" data-act="rechazar">Rechazar recepción</button></div>
+    </div></div>`;
+}
+function panelIncidencias(r) {
+  if (!r.incidencias.length) return "";
+  return `<div class="card"><h2>Incidencias</h2><p class="sub">Las resuelve una persona distinta de quien las registró.</p>
+    <div class="tablewrap"><table><thead><tr><th>Rollo</th><th>Descripción</th><th>Registró</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${r.incidencias.map((i, k) => `<tr><td><button class="link mono" data-act="ficha" data-cod="${i.pieza}">${i.pieza}</button></td><td>${esc(i.desc)}</td><td>${quien(i.por)}</td>
+      <td>${i.abierta ? `<span class="pill s-bad">Abierta</span>` : `<span class="pill s-off">${i.resolucion} por ${quien(i.resueltoPor)}</span>`}</td>
+      <td>${i.abierta && puede("pieza.resolver_incidencia") ? `<div class="acts-row"><button class="btn small" data-act="resolver" data-k="${k}" data-ok="1">Aceptar rollo</button><button class="btn small danger" data-act="resolver" data-k="${k}" data-ok="0">Rechazar rollo</button></div>` : ""}</td></tr>`).join("")}
+    </tbody></table></div></div>`;
+}
+function tablaPiezas(r) {
+  const ps = piezasDe(r).slice().reverse(), liberar = r.estado === "verificada" && puede("pieza.liberar");
+  const enCuar = ps.filter(p => p.estado === "en_cuarentena");
+  if (!ps.length) return `<div class="card"><h2>Rollos registrados</h2><p class="sub" style="margin:0">Todavía ninguno. El primero que guardes aparece aquí con su código.</p></div>`;
+  return `<div class="card" id="liberar">
+    <div class="form-foot" style="align-items:start">
+      <div><h2>${liberar ? "Liberar rollos" : "Rollos registrados"}</h2>
+      <p class="sub">${liberar ? "Marca los rollos que pasan al inventario comercial. Liberar es siempre una acción de una persona, nunca automática." : `${ps.length} ${ps.length === 1 ? "rollo" : "rollos"}, el más reciente arriba. Cada código es único y no se reutiliza.`}</p></div>
+      ${liberar && enCuar.length ? `<div class="acts-row"><button class="btn" data-act="liberar-todas">Liberar los ${enCuar.length} en cuarentena</button><button class="btn primary" data-act="liberar">Liberar marcados</button></div>` : ""}
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr>${liberar ? "<th></th>" : ""}<th>Código</th><th>Artículo</th><th class="num">Cantidad</th><th class="num">Fabricante</th><th>Ubicación</th><th>Estado</th><th>Etiqueta</th><th></th></tr></thead>
+      <tbody>${ps.map(p => { const a = art(p.art); return `<tr>
+        ${liberar ? `<td>${p.estado === "en_cuarentena" ? `<input type="checkbox" id="sel-${p.codigo}" data-sel="${p.codigo}" ${S.sel[p.codigo] ? "checked" : ""} aria-label="Marcar ${p.codigo}">` : ""}</td>` : ""}
+        <td><button class="link mono" data-act="ficha" data-cod="${p.codigo}">${p.codigo}</button></td>
+        <td>${esc(nombreArt(a))}</td><td class="num">${cant(p.cantidad, p.un)}</td><td class="num note">${p.fab ? cant(p.fab, p.un) : ""}</td><td>${esc(p.ubic)}</td>
+        <td>${pillPieza(p.estado)}</td>
+        <td>${p.impresiones ? `<span class="note">Impresa${p.impresiones > 1 ? ` ×${p.impresiones}` : ""}</span>` : `<span class="pill s-warn">Sin imprimir</span>`}</td>
+        <td><div class="acts-row" style="flex-wrap:nowrap">
+          <button class="btn small" data-act="etiqueta" data-cod="${p.codigo}">Etiqueta</button>
+          ${p.estado === "en_cuarentena" && puede("recepcion.registrar_pieza") && !["cerrada", "rechazada"].includes(r.estado) ? `<button class="btn small" data-act="inc" data-cod="${p.codigo}">Incidencia</button>` : ""}
+          ${["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) && puede("recepcion.anular") && ["en_preparacion", "pendiente_verificacion"].includes(r.estado) ? `<button class="btn small danger" data-act="anular" data-cod="${p.codigo}">Anular</button>` : ""}
+        </div></td></tr>` }).join("")}
+      </tbody></table></div></div>`;
+}
+function vistaRecepcion() {
+  const r = recById(S.rec);
+  return `
+  <div><button class="link" data-act="ir" data-v="recepciones">← Recepciones</button></div>
+  <section class="card rec-head">
+    <div class="rec-title"><h1>${r.numero}</h1>${pillRec(r.estado)}</div>
+    <dl class="facts">
+      <div><dt>Proveedor</dt><dd>${esc(prov(r.prov)?.nombre)}</dd></div>
+      <div><dt>Documento</dt><dd>${esc(r.doc)}</dd></div>
+      <div><dt>Fecha de recepción</dt><dd>${dmy(r.fecha)}</dd></div>
+      <div><dt>Almacén</dt><dd>Almacén Principal</dd></div>
+      <div><dt>Abrió</dt><dd>${quien(r.responsable)}</dd></div>
+    </dl>
+    ${pasos(r)}
+    ${siguiente(r)}
+  </section>
+  ${r.estado === "en_preparacion" ? `<div class="grid2">${formRegistro(r)}${tablaCuadre(r)}</div>` : tablaCuadre(r)}
+  ${panelDecision(r)}
+  ${panelIncidencias(r)}
+  ${tablaPiezas(r)}`;
+}
+
+// ---------------------------------------------------------------- Etiqueta y ficha
+function textoQR(p) {
+  const a = art(p.art);
+  return `${p.codigo}\n${a.codigo} ${nombreArt(a)}\n${UN[p.un].campo}: ${cant(p.cantidad, p.un)}\nRecibido: ${dmy(recById(p.rec).fecha)}`;
+}
+function qrSvg(texto) {
+  if (typeof qrcode !== "function") return `<svg viewBox="0 0 10 10" role="img" aria-label="QR no disponible"><rect width="10" height="10" fill="#fff" stroke="#000" stroke-width=".3"/><text x="5" y="5.6" font-size="1.2" text-anchor="middle" fill="#000">QR</text></svg>`;
+  if (qrcode.stringToBytesFuncs && qrcode.stringToBytesFuncs["UTF-8"]) qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
+  const q = qrcode(0, "M"); q.addData(texto); q.make();
+  const n = q.getModuleCount(); let d = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x} ${y}h1v1h-1z`;
+  return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" role="img" aria-label="Código QR del rollo" shape-rendering="crispEdges"><rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+function etiqueta(p) {
+  const r = recById(p.rec), a = art(p.art);
+  return `<div class="label" aria-label="Etiqueta de ${p.codigo}">
+    <div class="l-top"><span>${esc(prov(r.prov)?.nombre)}</span><span>${r.numero}</span></div>
+    <div class="l-code">${p.codigo}</div>
+    <div class="l-qr">${qrSvg(textoQR(p))}</div>
+    <div class="l-art"><b>${esc(a.codigo)}</b><br>${esc(nombreArt(a))}${a.ancho ? ` · ${String(a.ancho).replace(".", ",")} cm` : ""}</div>
+    <div class="l-kg"><span>${UN[p.un].campo}</span><strong>${cant(p.cantidad, p.un)}</strong></div>
+    <div class="l-foot"><span>Recibido ${dmy(r.fecha)}</span><span>Ubic. ${esc(p.ubic)}</span></div>
+  </div>`;
+}
+function vistaPieza() {
+  const p = D.piezas.find(x => x.codigo === S.pieza), r = recById(p.rec), a = art(p.art);
+  return `
+  <div><button class="link" data-act="abrir" data-id="${r.id}">← ${r.numero}</button></div>
+  <section class="card rec-head">
+    <div class="eyebrow">Ficha del rollo · lo que abre el QR dentro de la aplicación</div>
+    <div class="rec-title"><h1>${p.codigo}</h1>${pillPieza(p.estado)}</div>
+    <dl class="facts">
+      <div><dt>Artículo</dt><dd>${esc(a.codigo)} · ${esc(nombreArt(a))}</dd></div>
+      <div><dt>${UN[p.un].campo} inicial</dt><dd class="mono">${cant(p.cantidad, p.un)}</dd></div>
+      <div><dt>Cantidad actual</dt><dd class="mono">${cant(p.actual, p.un)}</dd></div>
+      <div><dt>Dato del fabricante</dt><dd class="mono">${p.fab ? cant(p.fab, p.un) : "No anotado"}</dd></div>
+      <div><dt>Recepción</dt><dd><button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button> · ${esc(r.doc)}</dd></div>
+      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}</dd></div>
+    </dl>
+    ${p.estado === "liberada" ? `<div class="banner ok">Disponible. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
+      : ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) ? `<div class="banner warn">No disponible para venta ni picking hasta que se libere.</div>` : `<div class="banner bad">Fuera del inventario. El código queda en el historial y no se reutiliza.</div>`}
+  </section>
+  <div class="ficha">
+    <div class="card"><h2>Historial</h2><p class="sub">Cada cambio queda registrado con quién y cuándo. No se borra ni se edita.</p>
+      <div class="tablewrap"><table class="events"><thead><tr><th>Fecha y hora</th><th>Qué pasó</th><th>Estado</th><th>Quién</th><th>Nota</th></tr></thead><tbody>
+      ${p.eventos.slice().reverse().map(e => `<tr><td>${e.hora}</td><td>${EVENTO[e.tipo]}</td><td class="note">${e.de && e.a && e.de !== e.a ? `${EST_PIEZA[e.de][0]} → ${EST_PIEZA[e.a][0]}` : e.a && !e.de ? EST_PIEZA[e.a][0] : ""}</td><td>${quien(e.quien)}</td><td>${esc(e.nota)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    <div class="stack">${etiqueta(p)}<button class="btn" data-act="etiqueta" data-cod="${p.codigo}">Ver etiqueta e imprimir</button></div>
+  </div>`;
+}
+function modal() {
+  const m = S.modal;
+  if (!m) return "";
+  const caja = (titulo, sup, cuerpo, ancho) => `<div class="scrim" data-act="cerrar-fondo"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t" ${ancho ? `style="max-width:${ancho}px"` : ""}>
+      <div class="dialog-head"><div><div class="eyebrow">${sup}</div><h2 id="dlg-t">${titulo}</h2></div><button class="btn small" data-act="cerrar">Cerrar</button></div>${cuerpo}</div></div>`;
+  if (m.tipo === "etiqueta") {
+    const p = D.piezas.find(x => x.codigo === m.codigo);
+    return caja(p.codigo, m.nueva ? "Rollo guardado" : "Etiqueta térmica 100 × 150 mm", `
+      <div class="label-view">${etiqueta(p)}
+        <div class="stack">
+          <div><b>Lo que lee cualquier celular</b><p class="note" style="margin:2px 0 0">El QR es la cédula del rollo: se lee con la cámara, sin entrar al sistema. Prueba a escanearlo.</p>
+          <div class="cedula">${esc(textoQR(p))}</div></div>
+          <div><b>Dentro de la aplicación</b><p class="note" style="margin:2px 0 0">El mismo QR abre la ficha de este rollo, y en picking o venta selecciona exactamente este rollo.</p></div>
+          <p class="note" style="margin:0">${p.impresiones ? `Impresa ${p.impresiones} ${p.impresiones === 1 ? "vez" : "veces"}. Cada reimpresión queda en el historial.` : "Todavía no se ha impreso."}</p>
+          <div class="acts-row">${puede("etiqueta.imprimir") ? `<button class="btn primary" data-act="imprimir" data-cod="${p.codigo}">${p.impresiones ? "Reimprimir" : "Imprimir etiqueta"}</button>` : ""}
+            <button class="btn" data-act="ficha" data-cod="${p.codigo}">Abrir ficha</button></div>
+        </div></div>`);
+  }
+  if (m.tipo === "inc") return caja(m.codigo, "Registrar incidencia", `
+      <div class="field"><label for="inc-desc">Qué tiene el rollo</label><textarea id="inc-desc" placeholder="Ej.: Rollo mojado en un extremo">${esc(m.desc || "")}</textarea></div>
+      <p class="note" style="margin:0">El rollo queda apartado y no se libera hasta que otra persona resuelva la incidencia.</p>
+      <div class="acts-row"><button class="btn primary" data-act="inc-guardar">Registrar incidencia</button></div>`, 480);
+  if (m.tipo === "anular") return caja(m.codigo, "Anular rollo", `
+      <p style="margin:0">El rollo sale del cuadre y su código queda quemado: nunca se vuelve a usar. Si el rollo existe, se registra de nuevo con un código nuevo.</p>
+      <div class="acts-row"><button class="btn danger" data-act="anular-ok">Anular por dato mal digitado</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 480);
+  if (m.tipo === "borrar") return caja("Empezar de cero", "Prototipo", `
+      <p style="margin:0">Se borran de este navegador todos los artículos, proveedores, recepciones y rollos que creaste en el prototipo. No afecta a la base real.</p>
+      <div class="acts-row"><button class="btn danger" data-act="borrar-ok">Borrar todo</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 480);
+  return "";
+}
+
+// ---------------------------------------------------------------- Ejemplo opcional
+function cargarEjemplo() {
+  const add = (tela, un, ancho, comp, tope, filas) => filas.forEach(([color, codigo, abr]) =>
+    D.articulos.push({ id: "a" + (++D.sec.art), tela, color, codigo, abr, un, ancho, comp, tope, activo: true, usada: false }));
+  if (!D.articulos.some(a => a.tela === "Microfibra unicolor"))
+    add("Microfibra unicolor", "kg", 150, "100% poliéster", 60, [["Blanco", "MFU-001", "MUB"], ["Negro", "MFU-002", "MUN"], ["Rojo", "MFU-003", "MUR"], ["Azul rey", "MFU-004", "MUA"]]);
+  if (!D.articulos.some(a => a.tela === "Gabardina stretch"))
+    add("Gabardina stretch", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
+  if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
+  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores y un proveedor.";
+}
+
+// ---------------------------------------------------------------- Dibujo y eventos
+const $app = document.getElementById("app"), $modal = document.getElementById("modal"), $toast = document.getElementById("toast"), $tabs = document.getElementById("tabs");
+let toastTimer;
+function toast(msg, error) {
+  $toast.innerHTML = `<div class="toast ${error ? "error" : ""}" role="status">${esc(msg)}</div>`;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $toast.innerHTML = "" }, error ? 6000 : 4200);
+}
+function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
+function render() {
+  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["recepciones", "3", "Recepciones", D.recs.length]];
+  $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, recepciones: vistaRecepciones, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
+  $modal.innerHTML = modal();
+}
+function hacer(fn) {
+  try { const msg = fn(); guardar(); render(); if (msg) toast(msg) }
+  catch (e) { if (e instanceof Regla) toast(e.message, true); else throw e }
+}
+function ir(view, extra) { Object.assign(S, { view, modal: null }, extra); render(); window.scrollTo(0, 0) }
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act, r = S.rec && recById(S.rec), pz = el.dataset.cod && D.piezas.find(p => p.codigo === el.dataset.cod);
+  if (act === "cerrar-fondo") { if (e.target === el) { S.modal = null; render() } return }
+  switch (act) {
+    case "ir": return ir(el.dataset.v);
+    case "abrir": return ir("recepcion", { rec: el.dataset.id, motivo: "", sel: {} });
+    case "ficha": return ir("pieza", { pieza: el.dataset.cod, rec: pz.rec });
+    case "ejemplo": return hacer(cargarEjemplo);
+    case "borrar": S.modal = { tipo: "borrar" }; return render();
+    case "borrar-ok": try { localStorage.removeItem(CLAVE) } catch (x) {}
+      Object.assign(D, { articulos: [], proveedores: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0 } });
+      Object.assign(S, { artForm: null, provForm: null, recForm: null }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
+    case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-tela")?.focus(); return;
+    case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
+    case "art-activar": return hacer(() => ACC_ART.activar(art(el.dataset.id)));
+    case "af-unidad": S.artForm.unidad = el.dataset.un; return render();
+    case "af-fila": S.artForm.filas.push(nuevaFila()); render(); document.querySelector(`[data-row="${S.artForm.filas.length - 1}"][data-col="color"]`)?.focus(); return;
+    case "af-quitar": S.artForm.filas.splice(+el.dataset.row, 1); render(); return refrescarSugerencias();
+    case "af-cancelar": S.artForm = null; return render();
+    case "prov-nuevo": S.provForm = { codigo: "", nombre: "", fiscal: "", pais: "" }; render(); document.getElementById("pf-codigo")?.focus(); return;
+    case "prov-cancelar": S.provForm = null; return render();
+    case "rec-nueva": abrirFormRecepcion(); return render();
+    case "rf-linea": S.recForm.lineas.push({ art: "", cant: "", rollos: "" }); return render();
+    case "rf-quitar": S.recForm.lineas.splice(+el.dataset.row, 1); return render();
+    case "rf-cancelar": S.recForm = null; return render();
+    case "cerrar": S.modal = null; return render();
+    case "etiqueta": S.modal = { tipo: "etiqueta", codigo: el.dataset.cod }; return render();
+    case "imprimir": return hacer(() => ACC.imprimir(pz));
+    case "terminar": return hacer(() => ACC.terminar(r));
+    case "enviar": return hacer(() => ACC.enviar(r));
+    case "aprobar": return hacer(() => ACC.decidir(r, "aprobada"));
+    case "rechazar": return hacer(() => ACC.decidir(r, "rechazada"));
+    case "liberar": return hacer(() => ACC.liberar(r, false));
+    case "liberar-todas": return hacer(() => ACC.liberar(r, true));
+    case "inc": S.modal = { tipo: "inc", codigo: el.dataset.cod }; render(); document.getElementById("inc-desc")?.focus(); return;
+    case "inc-guardar": { const p = D.piezas.find(x => x.codigo === S.modal.codigo); return hacer(() => { const m = ACC.incidencia(r, p, S.modal.desc || ""); S.modal = null; return m }) }
+    case "anular": S.modal = { tipo: "anular", codigo: el.dataset.cod }; return render();
+    case "anular-ok": { const p = D.piezas.find(x => x.codigo === S.modal.codigo); return hacer(() => { const m = ACC.anular(r, p); S.modal = null; return m }) }
+    case "resolver": return hacer(() => ACC.resolver(r, r.incidencias[+el.dataset.k], el.dataset.ok === "1"));
+    case "ir-a": e.preventDefault(); document.getElementById(el.dataset.to)?.scrollIntoView({ behavior: "smooth" }); return;
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.modal) { S.modal = null; render() }
+  if (e.key === "Enter" && e.target.matches("tr.click")) e.target.click();
+});
+document.addEventListener("input", e => {
+  const t = e.target, ds = t.dataset;
+  if (ds.af) { S.artForm[ds.af] = t.value; if (ds.af === "tela") refrescarSugerencias(); return }
+  if (ds.row !== undefined && ds.col && S.artForm) {
+    const fila = S.artForm.filas[+ds.row];
+    if (ds.col === "codigo" || ds.col === "abr") { const pos = t.selectionStart; t.value = t.value.toUpperCase(); try { t.setSelectionRange(pos, pos) } catch (x) {} }
+    fila[ds.col] = t.value;
+    if (ds.col === "abr") fila.abrTocada = t.value.trim() !== "";
+    return refrescarSugerencias();
+  }
+  if (ds.pf) { S.provForm[ds.pf] = t.value; return }
+  if (ds.rf) { S.recForm[ds.rf] = t.value; return }
+  if (ds.rl !== undefined && ds.col !== "art") { S.recForm.lineas[+ds.rl][ds.col] = t.value; return }
+  if (t.id === "f-peso") S.form.peso = t.value;
+  else if (t.id === "f-fab") S.form.fab = t.value;
+  else if (t.id === "motivo") S.motivo = t.value;
+  else if (t.id === "inc-desc") S.modal.desc = t.value;
+});
+document.addEventListener("change", e => {
+  const t = e.target, ds = t.dataset;
+  if (ds.rl !== undefined && ds.col === "art") { S.recForm.lineas[+ds.rl].art = t.value; return render() }
+  if (ds.rf) { S.recForm[ds.rf] = t.value; return }
+  if (t.id === "f-art") { S.form.art = t.value; S.form.peso = ""; S.form.fab = ""; return render() }
+  if (t.id === "f-ubic") S.form.ubic = t.value;
+  else if (ds.sel) S.sel[ds.sel] = t.checked;
+  else if (t.id === "user") { S.user = t.value; S.motivo = ""; render(); toast(`Ahora ves la aplicación como ${u().nombre}, ${u().rol.toLowerCase()}.`) }
+});
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  const id = e.target.id;
+  if (id === "art-form") return hacer(ACC_ART.guardar);
+  if (id === "prov-form") return hacer(ACC_PROV.guardar);
+  if (id === "rec-form") return hacer(ACC.crearRecepcion);
+  if (id === "reg") return hacer(() => ACC.registrar(recById(S.rec)));
+  if (id === "scan-form") {
+    const q = document.getElementById("scan").value.trim().toUpperCase();
+    if (!q) return;
+    const p = D.piezas.find(x => x.codigo === q) || D.piezas.find(x => x.codigo.endsWith(q));
+    if (!p) return toast(`No existe el rollo ${q} en esta empresa.`, true);
+    document.getElementById("scan").value = "";
+    ir("pieza", { pieza: p.codigo, rec: p.rec });
+  }
+});
+
+document.getElementById("user").innerHTML = Object.entries(USERS).map(([k, v]) => `<option value="${k}">${v.nombre} · ${v.rol}</option>`).join("");
+cargar();
+if (D.recs.length) S.view = "recepciones";
+render();
+</script>

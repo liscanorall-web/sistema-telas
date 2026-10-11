@@ -74,11 +74,11 @@ insert into public.sucursal (empresa_id, codigo, nombre, ciudad) values (:'emp_a
 insert into public.sucursal (empresa_id, codigo, nombre, ciudad) values (:'emp_a', 'SUR', 'Sucursal Sur', 'Ciudad Sur') returning id as suc_sur \gset
 insert into public.almacen (empresa_id, sucursal_id, codigo, nombre) values (:'emp_a', :'suc_norte', 'ALM-N', 'Almacén Norte') returning id as alm_norte \gset
 insert into public.almacen (empresa_id, sucursal_id, codigo, nombre) values (:'emp_a', :'suc_sur', 'ALM-S', 'Almacén Sur') returning id as alm_sur \gset
-insert into public.articulo (empresa_id, codigo, descripcion, material, color, abreviatura, unidad_control, cantidad_max_pieza)
+insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control, cantidad_max_pieza)
   values (:'emp_a', 'MUTJ001', 'Muselina blanca', 'Muselina', 'Blanco', 'MUB', 'kg', 80) returning id as art_mub \gset
-insert into public.articulo (empresa_id, codigo, descripcion, material, color, abreviatura, unidad_control)
+insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
   values (:'emp_a', 'MUTJ002', 'Muselina negra', 'Muselina', 'Negro', 'MUN', 'kg') returning id as art_mun \gset
-insert into public.articulo (empresa_id, codigo, descripcion, material, color, abreviatura, unidad_control)
+insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
   values (:'emp_a', 'PPTJ001', 'Polipiel marrón', 'Polipiel', 'Marrón', 'PPM', 'm') returning id as art_ppm \gset
 insert into public.proveedor (empresa_id, codigo, nombre) values (:'emp_a', 'PROV1', 'Proveedor Uno') returning id as prov_a \gset
 
@@ -97,9 +97,24 @@ select prueba.falla('Aislamiento',
   format($$select public.crear_empresa('x', null, null)$$), 'Admin de empresa tampoco crea empresas', 'plataforma');
 
 select prueba.falla('Aislamiento', format(
-  $$insert into public.articulo (empresa_id, codigo, descripcion, abreviatura, unidad_control)
-    values (%L, 'MUTJ009', 'Duplicada', 'MUB', 'kg')$$, :'emp_a'),
+  $$insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
+    values (%L, 'MUTJ009', 'Duplicada', 'Muselina', 'Crudo', 'MUB', 'kg')$$, :'emp_a'),
   'La abreviatura es única dentro de la empresa (P-07)', 'duplicate');
+select prueba.falla('Catálogo', format(
+  $$insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
+    values (%L, 'MUTJ010', 'Muselina blanca otra vez', 'muselina ', 'BLANCO', 'MUB2', 'kg')$$, :'emp_a'),
+  'Un color no se repite dentro de la misma tela, aunque cambien mayúsculas o espacios', 'articulo_tela_color_unico');
+select prueba.falla('Catálogo', format(
+  $$insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
+    values (%L, 'MUTJ011', 'Muselina roja', 'Muselina', 'Rojo', 'MUR', 'm')$$, :'emp_a'),
+  'Todos los colores de una tela usan la misma unidad (kilo o metro)', 'misma unidad');
+select prueba.falla('Catálogo', format(
+  $$insert into public.articulo (empresa_id, codigo, descripcion, tela, abreviatura, unidad_control)
+    values (%L, 'MUTJ012', 'Muselina sin color', 'Muselina', 'MUX', 'kg')$$, :'emp_a'),
+  'Cada artículo es un color concreto: el color es obligatorio', 'color');
+insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control, ancho_cm, composicion)
+  values (:'emp_a', 'MUTJ003', 'Muselina roja', 'Muselina', 'Rojo', 'MUR', 'kg', 150, '100% algodón') returning id as art_mur \gset
+select prueba.ok('Catálogo', :'art_mur' is not null, 'Se agrega otro color a una tela existente con su propio código y abreviatura');
 
 -- ---------------------------------------------------------------------
 -- Empresa B: mismo código de artículo y misma abreviatura (permitido)
@@ -107,8 +122,8 @@ select prueba.falla('Aislamiento', format(
 select prueba.como(:'u_admin_b');
 insert into public.sucursal (empresa_id, codigo, nombre) values (:'emp_b', 'CENTRO', 'Sucursal Centro') returning id as suc_b \gset
 insert into public.almacen (empresa_id, sucursal_id, codigo, nombre) values (:'emp_b', :'suc_b', 'ALM-C', 'Almacén Centro') returning id as alm_b \gset
-insert into public.articulo (empresa_id, codigo, descripcion, abreviatura, unidad_control)
-  values (:'emp_b', 'MUTJ001', 'Muselina blanca B', 'MUB', 'kg') returning id as art_b \gset
+insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
+  values (:'emp_b', 'MUTJ001', 'Muselina blanca B', 'Muselina', 'Blanco', 'MUB', 'kg') returning id as art_b \gset
 insert into public.proveedor (empresa_id, codigo, nombre) values (:'emp_b', 'PROVB', 'Proveedor B') returning id as prov_b \gset
 select (public.crear_recepcion(:'emp_b', :'prov_b', 'factura', 'FB-1', '2026-10-11', :'alm_b')).id as rec_b \gset
 select (public.agregar_linea_recepcion(:'rec_b', :'art_b', 500, null)).id as lin_b \gset
@@ -214,8 +229,8 @@ select prueba.ok('Aislamiento', (select count(*) from public.evento_pieza where 
 select prueba.ok('Aislamiento', (select count(*) from public.vista_cuadre_recepcion where empresa_id = :'emp_a') = 0, 'B no ve el cuadre de A');
 select prueba.ok('Aislamiento', (select count(*) from public.membresia where empresa_id = :'emp_a') = 0, 'B no ve el equipo de A');
 select prueba.ok('Aislamiento', (select count(*) from public.perfil_usuario where id = :'u_gerente_a') = 0, 'B no ve los perfiles de A');
-select prueba.falla('Aislamiento', format($$insert into public.articulo (empresa_id, codigo, descripcion, abreviatura, unidad_control)
-  values (%L, 'HACK01', 'Intruso', 'HCK', 'kg')$$, :'emp_a'), 'B no puede crear artículos en A', 'row-level security');
+select prueba.falla('Aislamiento', format($$insert into public.articulo (empresa_id, codigo, descripcion, tela, color, abreviatura, unidad_control)
+  values (%L, 'HACK01', 'Intruso', 'Intrusa', 'Negro', 'HCK', 'kg')$$, :'emp_a'), 'B no puede crear artículos en A', 'row-level security');
 update public.articulo set descripcion = 'Modificado por B' where id = :'art_mub';
 select prueba.falla('Aislamiento', format($$insert into public.membresia (empresa_id, usuario_id, rol_id, todas_sucursales)
   values (%L, %L, %L, true)$$, :'emp_a', :'u_admin_b', :'rol_gerente'), 'B no puede darse acceso a A', 'row-level security');
@@ -366,6 +381,9 @@ select prueba.ok('Etiqueta', split_part(:'qr', E'\n', 1) ~ '^20261011-MUB-\d{3}$
   and split_part(:'qr', E'\n', 2) = 'MUTJ001 Muselina blanca'
   and split_part(:'qr', E'\n', 3) ~ '^Peso neto: \d+,\d{2} kg$',
   'El QR lleva la cédula del rollo: identificador, artículo y peso neto', replace(:'qr', E'\n', ' | '));
+select public.contenido_qr(id) as qr_m from public.pieza where codigo = '20261012-PPM-999' \gset
+select prueba.ok('Etiqueta', split_part(:'qr_m', E'\n', 3) = 'Metraje: 50,00 m',
+  'En telas por metro la cédula dice Metraje, no Peso neto', replace(:'qr_m', E'\n', ' | '));
 select public.registrar_impresion_etiqueta(:'p_qr') as imp1 \gset
 select public.registrar_impresion_etiqueta(:'p_qr') as imp2 \gset
 select prueba.ok('Etiqueta', :imp1 = 1 and :imp2 = 2, 'Cada impresión y reimpresión queda numerada y registrada');
