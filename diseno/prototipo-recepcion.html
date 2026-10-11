@@ -222,36 +222,36 @@ tr.off td { color: var(--muted) }
 const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "etiqueta.imprimir"];
 const USERS = {
   admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
-  ana:    { nombre: "Ana Pérez",  rol: "Responsable de recepción", permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir"] },
+  ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir"] },
   carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir"] },
-  luis:   { nombre: "Luis Mora",  rol: "Gerente",                  permisos: ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
+  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
 };
 const UN = {
   kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
   m:  { nombre: "Metro", corto: "m",  campo: "Metraje",   tope: 150 },
 };
-const MUELLE = "Muelle de recepción";   // donde queda cada rollo desde que se registra hasta que se ubica en su anaquel
+const MUELLE = "Muelle de recepción";   // solo para recepciones creadas antes de que existiera el catálogo de muelles
 const DOCS = ["Factura", "Orden de compra", "Lista de empaque"];
 const EST_REC = {
   en_preparacion:         ["En registro", "s-info", "Registrar rollos"],
   pendiente_verificacion: ["Por verificar", "s-info", "Revisar y enviar al gerente"],
   pendiente_autorizacion: ["Esperando al gerente", "s-warn", "Aprobar o rechazar"],
   verificada:             ["Aprobada, por liberar", "s-warn", "Liberar rollos"],
-  por_ubicar:             ["Liberada, por ubicar", "s-warn", "Ubicar rollos en anaqueles"],
+  por_ubicar:             ["Liberada, por trasladar", "s-warn", "Trasladar rollos a anaqueles"],
   cerrada:                ["Cerrada", "s-ok", "Nada"],
   rechazada:              ["Rechazada", "s-bad", "Nada"],
 };
 const EST_PIEZA = {
   en_cuarentena:          ["En cuarentena", "s-warn"],
   pendiente_autorizacion: ["Con incidencia", "s-bad"],
-  liberada:               ["Liberado, por ubicar", "s-warn"],
+  liberada:               ["Liberado, en muelle", "s-warn"],
   disponible:             ["Disponible para venta", "s-ok"],
   rechazada:              ["Rechazada", "s-bad"],
   anulada:                ["Anulada", "s-off"],
 };
 const EVENTO = {
   registrada: "Registrado en recepción", etiqueta: "Etiqueta impresa", incidencia: "Incidencia registrada",
-  incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado de cuarentena", ubicada: "Ubicado en anaquel",
+  incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado de cuarentena", ubicada: "Trasladado a anaquel",
   rechazada: "Rechazado", anulada: "Anulado",
 };
 
@@ -264,7 +264,7 @@ const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: nul
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
 function cargar() {
   try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
-  D.ubicaciones ||= []; D.sec.ubi ||= 0;
+  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
   // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
   D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
 }
@@ -479,40 +479,47 @@ function vistaProveedores() {
 
 // ---------------------------------------------------------------- Módulo 3 · Ubicaciones
 function ubiPorCodigo(cod) { return D.ubicaciones.find(x => x.codigo === String(cod).trim().toUpperCase()) }
+const TIPO_UBI = { muelle: ["Muelle", "Donde se descarga el contenedor y se registran los rollos"], anaquel: ["Anaquel", "Donde se guardan los rollos disponibles para la venta"] };
 const ACC_UBI = {
   guardar() {
     exigir("catalogo.editar");
-    const f = S.ubiForm, cod = f.codigo.trim().toUpperCase();
-    if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla("El código del anaquel lleva letras, números o guion, sin espacios. Por ejemplo A-01-03.");
-    if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada anaquel tiene un código único.`);
-    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, desc: f.desc.trim(), activo: true });
-    S.ubiForm = { codigo: "", desc: "" };
-    return `Anaquel ${cod} creado. Puedes escribir el siguiente.`;
+    const f = S.ubiForm, cod = f.codigo.trim().toUpperCase(), tipo = TIPO_UBI[f.tipo][0].toLowerCase();
+    if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla(`El código del ${tipo} lleva letras, números o guion, sin espacios. Por ejemplo ${f.tipo === "muelle" ? "MUELLE-1" : "A-01-03"}.`);
+    if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada ubicación tiene un código único.`);
+    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: f.tipo, desc: f.desc.trim(), activo: true });
+    S.ubiForm = { tipo: f.tipo, codigo: "", desc: "" };
+    return `${TIPO_UBI[f.tipo][0]} ${cod} creado. Puedes escribir el siguiente.`;
   },
-  activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se ubican rollos en él.` },
+  activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se usa en recepciones ni traslados nuevos.` },
 };
+function ubisActivas(tipo) { return D.ubicaciones.filter(x => x.activo && x.tipo === tipo) }
 function vistaUbicaciones() {
   const editar = puede("catalogo.editar"), f = S.ubiForm;
-  const rollosEn = cod => D.piezas.filter(p => p.estado === "disponible" && p.ubic === cod).length;
-  return `
-  <section class="page-head">
-    <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>Los anaqueles del almacén. Cada rollo liberado se ubica en uno de ellos y solo entonces queda disponible para la venta.</p></div>
-    <div class="counts">${editar && !f ? `<button class="btn primary" data-act="ubi-nuevo">Nuevo anaquel</button>` : ""}</div>
-  </section>
-  ${f ? `<section class="card"><h2>Nuevo anaquel</h2><p class="sub">Un código corto, igual al que lleva pegado el anaquel, para escanearlo o escribirlo al ubicar. Un orden útil es pasillo, anaquel y nivel.</p>
-    <form class="form" id="ubi-form"><div class="row2">
-      <div class="field"><label for="uf-codigo">Código del anaquel</label><input id="uf-codigo" class="mono" data-uf="codigo" value="${esc(f.codigo)}" placeholder="Ej. A-01-03" autocomplete="off" style="text-transform:uppercase"></div>
-      <div class="field"><label for="uf-desc">Descripción (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="Ej. Pasillo A, anaquel 1, nivel 3" autocomplete="off"></div></div>
-      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">Guardar anaquel</button></div></div>
-    </form></section>` : ""}
-  ${!D.ubicaciones.length && !f ? `<section class="card empty"><h2>Todavía no hay anaqueles</h2><p>Crea los anaqueles del almacén para poder ubicar los rollos que salen de cada recepción.</p>
-      ${editar ? `<button class="btn primary" data-act="ubi-nuevo">Crear el primer anaquel</button>` : `<p class="note">Los anaqueles los crea el administrador o el gerente.</p>`}</section>` : ""}
-  ${D.ubicaciones.length ? `<section class="card"><div class="tablewrap"><table>
-    <thead><tr><th>Código</th><th>Descripción</th><th>Almacén</th><th class="num">Rollos disponibles</th><th>Estado</th><th></th></tr></thead>
-    <tbody>${D.ubicaciones.map(x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(x.desc)}</td><td>Almacén Principal</td><td class="num">${rollosEn(x.codigo)}</td>
+  const rollosEn = cod => D.piezas.filter(p => ["en_cuarentena", "pendiente_autorizacion", "liberada", "disponible"].includes(p.estado) && p.ubic === cod).length;
+  const grupo = tipo => { const xs = D.ubicaciones.filter(x => x.tipo === tipo); return `<section class="card">
+    <div class="grupo-head"><h2>${tipo === "muelle" ? "Muelles de recepción" : "Anaqueles"}</h2><span class="note">${TIPO_UBI[tipo][1]}</span></div>
+    ${xs.length ? `<div class="tablewrap"><table>
+    <thead><tr><th>Código</th><th>Descripción</th><th>Almacén</th><th class="num">Rollos ahí</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${xs.map(x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(x.desc)}</td><td>Almacén Principal</td><td class="num">${rollosEn(x.codigo)}</td>
       <td>${x.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
       <td>${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}</tbody>
-  </table></div></section>` : ""}`;
+    </table></div>` : `<p class="note" style="margin:0">Todavía no hay ${tipo === "muelle" ? "muelles. Hace falta al menos uno para abrir una recepción." : "anaqueles. Hacen falta para trasladar los rollos y dejarlos disponibles para la venta."}</p>`}</section>` };
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>El contenedor se descarga y se registra en un muelle. Cuando toda la recepción está confirmada, los rollos se trasladan a los anaqueles y solo entonces quedan disponibles para la venta.</p></div>
+    <div class="counts">${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo anaquel</button>` : ""}</div>
+  </section>
+  ${f ? `<section class="card"><h2>Nueva ubicación</h2><p class="sub">Un código corto, igual al que lleva pegado el sitio, para escanearlo o escribirlo. Para anaqueles, un orden útil es pasillo, anaquel y nivel.</p>
+    <form class="form" id="ubi-form"><div class="row2">
+      <div class="field"><span class="lbl" id="lbl-tipo">Tipo</span>
+        <div class="seg" role="group" aria-labelledby="lbl-tipo">${Object.keys(TIPO_UBI).map(k => `<button type="button" data-act="uf-tipo" data-tipo="${k}" aria-pressed="${f.tipo === k}">${TIPO_UBI[k][0]}</button>`).join("")}</div>
+        <span class="hint">${TIPO_UBI[f.tipo][1]}.</span></div>
+      <div class="field"><label for="uf-codigo">Código</label><input id="uf-codigo" class="mono" data-uf="codigo" value="${esc(f.codigo)}" placeholder="${f.tipo === "muelle" ? "Ej. MUELLE-1" : "Ej. A-01-03"}" autocomplete="off" style="text-transform:uppercase"></div>
+      <div class="field"><label for="uf-desc">Descripción (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="${f.tipo === "muelle" ? "Ej. Puerta 1, descarga de contenedores" : "Ej. Pasillo A, anaquel 1, nivel 3"}" autocomplete="off"></div></div>
+      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">Guardar ${TIPO_UBI[f.tipo][0].toLowerCase()}</button></div></div>
+    </form></section>` : ""}
+  ${grupo("muelle")}
+  ${grupo("anaquel")}`;
 }
 
 // ---------------------------------------------------------------- Módulo 4 · Recepciones
@@ -541,15 +548,17 @@ function cuadre(r) {
 }
 
 function abrirFormRecepcion() {
-  S.recForm = { prov: D.proveedores[0]?.id || "", docTipo: "Factura", docNum: "", fecha: hoyISO(), lineas: [{ art: "", cant: "", rollos: "" }] };
+  S.recForm = { prov: D.proveedores[0]?.id || "", docTipo: "Factura", docNum: "", fecha: hoyISO(), muelle: ubisActivas("muelle")[0]?.codigo || "", contenedor: "", lineas: [{ art: "", cant: "", rollos: "" }] };
 }
 const ACC = {
   crearRecepcion() {
     exigir("recepcion.crear");
     const f = S.recForm;
     if (!prov(f.prov)) throw new Regla("Elige el proveedor.");
+    if (f.contenedor.trim() && !/^[A-Za-z0-9 -]{4,20}$/.test(f.contenedor.trim())) throw new Regla("El número de contenedor lleva letras y números, por ejemplo MSCU 123456-7.");
     if (!f.docNum.trim()) throw new Regla("Escribe el número del documento del proveedor.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.fecha)) throw new Regla("Indica la fecha de recepción.");
+    if (!ubisActivas("muelle").some(x => x.codigo === f.muelle)) throw new Regla("Elige el muelle donde se descarga el contenedor.");
     const lineas = f.lineas.filter(l => l.art || l.cant.trim() || l.rollos.trim());
     if (!lineas.length) throw new Regla("Agrega al menos un artículo facturado.");
     const vistos = new Set();
@@ -565,7 +574,7 @@ const ACC = {
       return { art: a.id, esperado: c, rollos: ro };
     });
     const r = { id: "r" + (++D.sec.rec), numero: `REC-${String(D.sec.rec).padStart(6, "0")}`, prov: f.prov, doc: `${f.docTipo} ${f.docNum.trim()}`,
-                fecha: f.fecha, estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null, t: {} };
+                fecha: f.fecha, muelle: f.muelle, contenedor: f.contenedor.trim().toUpperCase(), estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null, t: {} };
     marcar(r, "inicio");
     D.recs.push(r);
     S.recForm = null; S.view = "recepcion"; S.rec = r.id; S.form.art = ok[0].art;
@@ -582,7 +591,7 @@ const ACC = {
     let fab = null;
     if (f.fab.trim()) { fab = decimal(f.fab); if (!(fab > 0)) throw new Regla("El dato de la etiqueta del fabricante admite hasta 2 decimales.") }
     const p = { codigo: siguienteCodigo(r.fecha, a.abr, true), art: a.id, un: a.un, rec: r.id, cantidad: c, actual: c, fab,
-                estado: "en_cuarentena", ubic: MUELLE, por: S.user, impresiones: 0, eventos: [] };
+                estado: "en_cuarentena", ubic: r.muelle, por: S.user, impresiones: 0, eventos: [] };
     evento(p, "registrada", null, "en_cuarentena");
     D.piezas.push(p); a.usada = true;
     S.form.peso = ""; S.form.fab = "";
@@ -635,7 +644,7 @@ const ACC = {
     if (!objetivo.length) throw new Regla("Marca al menos un rollo en cuarentena para liberarlo.");
     objetivo.forEach(p => { p.estado = "liberada"; evento(p, "liberada", "en_cuarentena", "liberada"); delete S.sel[p.codigo] });
     intentarCerrar(r);
-    return `${objetivo.length} ${objetivo.length === 1 ? "rollo liberado" : "rollos liberados"} de cuarentena.${r.estado === "por_ubicar" ? " Ahora hay que ubicarlos en sus anaqueles; hasta entonces no se pueden vender." : r.estado === "cerrada" ? " La recepción quedó cerrada." : ""}`;
+    return `${objetivo.length} ${objetivo.length === 1 ? "rollo liberado" : "rollos liberados"} de cuarentena.${r.estado === "por_ubicar" ? " Ahora se trasladan del muelle a los anaqueles; hasta entonces no se pueden vender." : r.estado === "cerrada" ? " La recepción quedó cerrada." : ""}`;
   },
   incidencia(r, p, desc) {
     exigir("recepcion.registrar_pieza");
@@ -659,23 +668,24 @@ const ACC = {
   },
   ubicar(r, codRollo, codAnaquel) {
     exigir("pieza.ubicar");
-    if (r.estado !== "por_ubicar") throw new Regla("Los rollos se ubican cuando toda la recepción está liberada.");
+    if (r.estado !== "por_ubicar") throw new Regla("Los rollos se trasladan cuando toda la recepción está confirmada y liberada.");
     const x = ubiPorCodigo(codAnaquel || "");
     if (!x) throw new Regla(codAnaquel?.trim() ? `No existe el anaquel ${codAnaquel.trim().toUpperCase()}. Créalo en Ubicaciones.` : "Primero escanea o escribe el anaquel.");
+    if (x.tipo !== "anaquel") throw new Regla(`${x.codigo} es un muelle. Los rollos se trasladan del muelle a un anaquel.`);
     if (!x.activo) throw new Regla(`El anaquel ${x.codigo} está desactivado.`);
     const q = String(codRollo || "").trim().toUpperCase();
     if (!q) throw new Regla("Escanea o escribe el código del rollo.");
     const p = D.piezas.find(z => z.codigo === q);
     if (!p) throw new Regla(`No existe el rollo ${q}.`);
     if (p.rec !== r.id) throw new Regla(`El rollo ${q} es de la recepción ${recById(p.rec).numero}, no de esta.`);
-    if (p.estado === "disponible") throw new Regla(`El rollo ${q} ya está ubicado en ${p.ubic}.`);
-    if (p.estado !== "liberada") throw new Regla(`El rollo ${q} está ${EST_PIEZA[p.estado][0].toLowerCase()}: no se ubica.`);
-    evento(p, "ubicada", "liberada", "disponible", `${MUELLE} → ${x.codigo}`);
+    if (p.estado === "disponible") throw new Regla(`El rollo ${q} ya está en el anaquel ${p.ubic}.`);
+    if (p.estado !== "liberada") throw new Regla(`El rollo ${q} está ${EST_PIEZA[p.estado][0].toLowerCase()}: no se traslada.`);
+    evento(p, "ubicada", "liberada", "disponible", `${p.ubic} → ${x.codigo}`);
     p.ubic = x.codigo; p.estado = "disponible"; S.ubi.rollo = "";
     if (!r.t?.primeraUbicacion) marcar(r, "primeraUbicacion");
     intentarCerrar(r);
     const faltan = piezasDe(r).filter(z => z.estado === "liberada").length;
-    return faltan ? `${q} ubicado en ${x.codigo}. Disponible para venta. Faltan ${faltan}.` : `${q} ubicado en ${x.codigo}. Era el último: recepción cerrada en ${dur(r.t.ubicado.ms - r.t.inicio.ms)} en total.`;
+    return faltan ? `${q} trasladado a ${x.codigo}. Disponible para venta. Faltan ${faltan}.` : `${q} trasladado a ${x.codigo}. Era el último: recepción cerrada en ${dur(r.t.ubicado.ms - r.t.inicio.ms)} en total.`;
   },
   anular(r, p) {
     exigir("recepcion.anular");
@@ -705,7 +715,7 @@ function vistaRecepciones() {
   const faltan = [];
   if (!D.articulos.some(a => a.activo)) faltan.push(`<button class="link" data-act="ir" data-v="articulos">crear artículos</button>`);
   if (!D.proveedores.length) faltan.push(`<button class="link" data-act="ir" data-v="proveedores">crear un proveedor</button>`);
-  if (!D.ubicaciones.some(x => x.activo)) faltan.push(`<button class="link" data-act="ir" data-v="ubicaciones">crear los anaqueles</button>`);
+  if (!ubisActivas("muelle").length) faltan.push(`<button class="link" data-act="ir" data-v="ubicaciones">crear un muelle de recepción</button>`);
   const cuenta = k => D.recs.filter(r => r.estado === k).length;
   return `
   <section class="page-head">
@@ -713,8 +723,8 @@ function vistaRecepciones() {
     <div class="counts">
       ${D.recs.length ? `<span class="pill s-info">En registro: ${cuenta("en_preparacion") + cuenta("pendiente_verificacion")}</span>
       <span class="pill s-warn">Esperando al gerente: ${cuenta("pendiente_autorizacion")}</span>
-      <span class="pill s-warn">Por ubicar: ${cuenta("por_ubicar")}</span>` : ""}
-      ${!S.recForm && puede("recepcion.crear") && !faltan.length ? `<button class="btn primary" data-act="rec-nueva">Nueva recepción</button>` : ""}
+      <span class="pill s-warn">Por trasladar: ${cuenta("por_ubicar")}</span>` : ""}
+      ${!S.recForm && puede("recepcion.crear") && !faltan.length ? `<button class="btn primary" data-act="rec-nueva">Nueva recepción</button>` : !puede("recepcion.crear") ? `<span class="note">Las recepciones las abre el gerente de recepción.</span>` : ""}
     </div>
   </section>
   ${faltan.length ? `<p class="banner info">Antes de recibir mercancía hay que ${faltan.join(" y ")}. Todo va atado: la recepción usa los códigos y la unidad de cada artículo.</p>` : ""}
@@ -725,7 +735,7 @@ function vistaRecepciones() {
       <thead><tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Documento</th><th class="num">Rollos</th><th class="num">Facturado</th><th class="num">Recibido</th><th>Estado</th><th>Siguiente paso</th><th class="num">Tiempo</th></tr></thead>
       <tbody>${[...D.recs].reverse().map(r => { const c = cuadre(r); return `
         <tr class="click" data-act="abrir" data-id="${r.id}" tabindex="0">
-          <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}</td>
+          <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}${r.contenedor ? `<br><span class="note mono">${esc(r.contenedor)}</span>` : ""}</td>
           <td class="num">${c.registradas}${c.rollos ? ` / ${c.rollos}` : ""}</td><td class="num">${porUnidad(c.lineas, l => l.esperado)}</td><td class="num">${porUnidad(c.lineas, l => l.recibido)}</td>
           <td>${pillRec(r.estado)}</td><td class="note">${EST_REC[r.estado][2]}</td><td class="num">${tiempoTotal(r)}</td></tr>` }).join("")}
       </tbody></table></div></section>` : ""}`;
@@ -738,13 +748,15 @@ function opcionesArticulo(sel) {
 }
 function formRecepcion() {
   const f = S.recForm;
-  return `<section class="card"><h2>Nueva recepción</h2><p class="sub">Copia lo que dice el documento del proveedor. Contra lo facturado se cuadra lo recibido.</p>
+  return `<section class="card"><h2>Nueva recepción · datos del contenedor</h2><p class="sub">El gerente de recepción vacía aquí la información del contenedor a descargar, tal como viene en el documento del proveedor. Contra esto se cuadra lo que se reciba en el muelle.</p>
     <form class="form" id="rec-form">
       <div class="row2">
         <div class="field"><label for="rf-prov">Proveedor</label><select id="rf-prov" data-rf="prov">${D.proveedores.map(p => `<option value="${p.id}" ${p.id === f.prov ? "selected" : ""}>${esc(p.nombre)}</option>`).join("")}</select></div>
         <div class="field"><label for="rf-tipo">Documento</label><select id="rf-tipo" data-rf="docTipo">${DOCS.map(d => `<option ${d === f.docTipo ? "selected" : ""}>${d}</option>`).join("")}</select></div>
         <div class="field"><label for="rf-num">Número del documento</label><input id="rf-num" data-rf="docNum" value="${esc(f.docNum)}" placeholder="Ej. F-002315" autocomplete="off"></div>
+        <div class="field"><label for="rf-cont">Contenedor (opcional)</label><input id="rf-cont" class="mono" data-rf="contenedor" value="${esc(f.contenedor)}" placeholder="Ej. MSCU 123456-7" autocomplete="off" style="text-transform:uppercase"><span class="hint">Déjalo vacío si la mercancía no llega en contenedor.</span></div>
         <div class="field"><label for="rf-fecha">Fecha de recepción</label><input id="rf-fecha" type="date" data-rf="fecha" value="${f.fecha}"><span class="hint">Va dentro del código de cada rollo.</span></div>
+        <div class="field"><label for="rf-muelle">Muelle de recepción</label><select id="rf-muelle" data-rf="muelle">${ubisActivas("muelle").map(x => `<option value="${esc(x.codigo)}" ${x.codigo === f.muelle ? "selected" : ""}>${esc(x.codigo)}${x.desc ? ` · ${esc(x.desc)}` : ""}</option>`).join("")}</select><span class="hint">Donde se descarga y se registra el contenedor.</span></div>
       </div>
       <div class="tablewrap"><table class="colores">
         <thead><tr><th>Artículo facturado</th><th>Cantidad facturada</th><th>Rollos facturados</th><th></th></tr></thead>
@@ -761,7 +773,7 @@ function formRecepcion() {
 
 function pasos(r) {
   const orden = ["en_preparacion", "pendiente_verificacion", "pendiente_autorizacion", "verificada", "por_ubicar", "cerrada"];
-  const nombres = [["Registro", "Cada rollo"], ["Verificación", "Responsable revisa"], ["Gerente", "Aprueba con el cuadre"], ["Liberación", "Persona autorizada"], ["Ubicación", "Cada rollo a su anaquel"], ["Cerrada", "Disponible para venta"]];
+  const nombres = [["Registro", "Cada rollo"], ["Verificación", "Gerente de recepción"], ["Gerente", "Aprueba con el cuadre"], ["Liberación", "Persona autorizada"], ["Traslado", "Del muelle al anaquel"], ["Cerrada", "Disponible para venta"]];
   const i = orden.indexOf(r.estado);
   if (i < 0) return "";
   return `<ol class="steps" aria-label="Etapas de la recepción">${nombres.map((n, k) =>
@@ -771,17 +783,17 @@ function siguiente(r) {
   const c = cuadre(r), sin = t => `<span class="note">${t}</span>`;
   switch (r.estado) {
     case "en_preparacion": { const pend = pendientesDeImprimir(r).length; return `<div class="next"><p><b>Registra todos los rollos de corrido.</b> Llevas ${c.registradas}${c.rollos ? ` de ${c.rollos}` : ""}.${pend ? ` Cuando termines, imprime las ${pend} etiquetas de una vez y pégalas.` : ""} Después cierra el registro para revisar el cuadre.</p>
-      <div class="acts">${pend && puede("etiqueta.imprimir") ? `<button class="btn" data-act="lote">Imprimir ${pend} ${pend === 1 ? "etiqueta" : "etiquetas"}</button>` : ""}${puede("recepcion.verificar") ? `<button class="btn primary" data-act="terminar">Terminar registro</button>` : sin("Cierra el registro el responsable de recepción.")}</div></div>` }
+      <div class="acts">${pend && puede("etiqueta.imprimir") ? `<button class="btn" data-act="lote">Imprimir ${pend} ${pend === 1 ? "etiqueta" : "etiquetas"}</button>` : ""}${puede("recepcion.verificar") ? `<button class="btn primary" data-act="terminar">Terminar registro</button>` : sin("Cierra el registro el gerente de recepción.")}</div></div>` }
     case "pendiente_verificacion": return `<div class="next"><p><b>Revisa el cuadre y envíalo al gerente.</b> Toda recepción pasa por el gerente, cuadre o no. Quien la envíe no podrá aprobarla.</p>
-      <div class="acts">${puede("recepcion.verificar") ? `<button class="btn primary" data-act="enviar">Enviar al gerente</button>` : sin("La envía el responsable de recepción.")}</div></div>`;
+      <div class="acts">${puede("recepcion.verificar") ? `<button class="btn primary" data-act="enviar">Enviar al gerente</button>` : sin("La envía el gerente de recepción.")}</div></div>`;
     case "pendiente_autorizacion": return `<div class="next"><p><b>Esperando la decisión del gerente.</b> Enviada por ${quien(r.verificadoPor)}. ${c.hayDif ? "El cuadre tiene diferencias: aprobar exige escribir el motivo." : "El cuadre coincide."}</p>
       <div class="acts">${puede("recepcion.aprobar") ? `<a class="btn primary" href="#decision" data-act="ir-a" data-to="decision">Ir a la decisión</a>` : sin("Decide el gerente.")}</div></div>`;
     case "verificada": return `<div class="next"><p><b>Aprobada por ${quien(r.decision?.por)}.</b> Los rollos siguen en cuarentena: no se venden ni se separan hasta que una persona autorizada los libere.</p>
       <div class="acts">${puede("pieza.liberar") ? `<a class="btn primary" href="#liberar" data-act="ir-a" data-to="liberar">Ir a liberar</a>` : sin("Libera el gerente.")}</div></div>`;
     case "por_ubicar": { const ps = piezasDe(r), hechos = ps.filter(p => p.estado === "disponible").length, total = hechos + ps.filter(p => p.estado === "liberada").length;
-      return `<div class="next"><p><b>Ubica cada rollo en su anaquel.</b> Llevas ${hechos} de ${total}. Están liberados pero siguen en el ${MUELLE.toLowerCase()} y no se venden hasta ubicarlos. Al ubicar el último, la recepción se cierra.</p>
-      <div class="acts">${puede("pieza.ubicar") ? `<a class="btn primary" href="#ubicar" data-act="ir-a" data-to="ubicar">Ir a ubicar</a>` : sin("Ubica el personal de almacén.")}</div></div>` }
-    case "cerrada": return `<div class="banner ok">Recepción cerrada${r.t?.ubicado && r.t?.inicio ? ` en ${dur(r.t.ubicado.ms - r.t.inicio.ms)}, desde que se abrió hasta la última ubicación` : ""}. Aprobada por ${quien(r.decision?.por)} el ${r.decision?.hora}. Sus rollos están en sus anaqueles y disponibles para la venta.</div>`;
+      return `<div class="next"><p><b>Traslada cada rollo del muelle a su anaquel.</b> Llevas ${hechos} de ${total}. Están liberados pero siguen en el muelle ${esc(muelleDe(r))} y no se venden hasta trasladarlos. Al trasladar el último, la recepción se cierra.</p>
+      <div class="acts">${puede("pieza.ubicar") ? `<a class="btn primary" href="#ubicar" data-act="ir-a" data-to="ubicar">Ir a trasladar</a>` : sin("Traslada el personal de almacén.")}</div></div>` }
+    case "cerrada": return `<div class="banner ok">Recepción cerrada${r.t?.ubicado && r.t?.inicio ? ` en ${dur(r.t.ubicado.ms - r.t.inicio.ms)}, desde que se abrió hasta el último traslado` : ""}. Aprobada por ${quien(r.decision?.por)} el ${r.decision?.hora}. Sus rollos están en sus anaqueles y disponibles para la venta.</div>`;
     case "rechazada": return `<div class="banner bad">Rechazada por ${quien(r.decision?.por)}: ${esc(r.decision?.motivo)}. Los rollos quedan rechazados y sus códigos no se reutilizan.</div>`;
   }
   return "";
@@ -817,7 +829,7 @@ function formRegistro(r) {
         <input id="f-peso" class="big" inputmode="decimal" placeholder="${a.un === "kg" ? "Ej. 25,40" : "Ej. 50,00"}" value="${esc(f.peso)}" ${ok ? "" : "disabled"} autocomplete="off"></div>
       <div class="field"><label for="f-fab">${U.campo} en etiqueta del fabricante (opcional)</label>
         <input id="f-fab" inputmode="decimal" placeholder="Opcional" value="${esc(f.fab)}" ${ok ? "" : "disabled"} autocomplete="off">
-        <span class="hint">El rollo queda en el ${MUELLE.toLowerCase()}. El anaquel se elige al final, cuando ya está liberado.</span></div>
+        <span class="hint">El rollo queda en el muelle ${esc(muelleDe(r))}. Al anaquel se traslada al final, cuando toda la recepción está confirmada.</span></div>
       <div class="form-foot">
         <span class="next-code">Código que recibirá: <b>${siguienteCodigo(r.fecha, a.abr, false)}</b></span>
         ${ok ? `<button class="btn primary" type="submit">Guardar rollo</button>` : `<span class="note">${u().nombre} no registra rollos.</span>`}
@@ -868,7 +880,7 @@ function tablaPiezas(r) {
         <td>${pillPieza(p.estado)}</td>
         <td>${p.impresiones ? `<span class="note">Impresa${p.impresiones > 1 ? ` ×${p.impresiones}` : ""}</span>` : `<span class="pill s-warn">Sin imprimir</span>`}</td>
         <td><div class="acts-row" style="flex-wrap:nowrap">
-          ${p.estado === "liberada" && r.estado === "por_ubicar" && puede("pieza.ubicar") ? `<button class="btn small primary" data-act="ubicar-fila" data-cod="${p.codigo}">Ubicar${S.ubi.anaquel ? ` en ${esc(S.ubi.anaquel.toUpperCase())}` : ""}</button>` : ""}
+          ${p.estado === "liberada" && r.estado === "por_ubicar" && puede("pieza.ubicar") ? `<button class="btn small primary" data-act="ubicar-fila" data-cod="${p.codigo}">Trasladar${S.ubi.anaquel ? ` a ${esc(S.ubi.anaquel.toUpperCase())}` : ""}</button>` : ""}
           <button class="btn small" data-act="etiqueta" data-cod="${p.codigo}">Etiqueta</button>
           ${p.estado === "en_cuarentena" && puede("recepcion.registrar_pieza") && !["cerrada", "rechazada"].includes(r.estado) ? `<button class="btn small" data-act="inc" data-cod="${p.codigo}">Incidencia</button>` : ""}
           ${["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) && puede("recepcion.anular") && ["en_preparacion", "pendiente_verificacion"].includes(r.estado) ? `<button class="btn small danger" data-act="anular" data-cod="${p.codigo}">Anular</button>` : ""}
@@ -886,6 +898,8 @@ function vistaRecepcion() {
       <div><dt>Documento</dt><dd>${esc(r.doc)}</dd></div>
       <div><dt>Fecha de recepción</dt><dd>${dmy(r.fecha)}</dd></div>
       <div><dt>Almacén</dt><dd>Almacén Principal</dd></div>
+      <div><dt>Muelle</dt><dd>${esc(muelleDe(r))}</dd></div>
+      ${r.contenedor ? `<div><dt>Contenedor</dt><dd class="mono">${esc(r.contenedor)}</dd></div>` : ""}
       <div><dt>Abrió</dt><dd>${quien(r.responsable)}</dd></div>
     </dl>
     ${pasos(r)}
@@ -901,26 +915,27 @@ function vistaRecepcion() {
 function panelUbicar(r) {
   if (r.estado !== "por_ubicar") return "";
   const ok = puede("pieza.ubicar"), ps = piezasDe(r), faltan = ps.filter(p => p.estado === "liberada"), hechos = ps.filter(p => p.estado === "disponible").length;
-  const activos = D.ubicaciones.filter(x => x.activo);
+  const activos = ubisActivas("anaquel");
   return `<div class="card" id="ubicar">
-    <h2>Ubicar rollos en anaqueles</h2>
-    <p class="sub">Escanea el anaquel y después cada rollo que pones en él. El anaquel se queda puesto hasta que escanees otro. Cada rollo ubicado queda disponible para la venta.</p>
-    ${!activos.length ? `<p class="banner warn">No hay anaqueles activos. <button class="link" data-act="ir" data-v="ubicaciones">Crea los anaqueles</button> para poder ubicar.</p>` : ""}
+    <h2>Trasladar rollos del muelle a los anaqueles</h2>
+    <p class="sub">Escanea el anaquel y después cada rollo que pones en él. El anaquel se queda puesto hasta que escanees otro. Cada rollo trasladado queda disponible para la venta.</p>
+    ${!activos.length ? `<p class="banner warn">No hay anaqueles activos. <button class="link" data-act="ir" data-v="ubicaciones">Crea los anaqueles</button> para poder trasladar.</p>` : ""}
     <form class="form" id="ubic-form">
       <div class="row2">
-        <div class="field"><label for="u-anaquel">Anaquel</label>
+        <div class="field"><label for="u-anaquel">Anaquel de destino</label>
           <input id="u-anaquel" class="big" list="lista-anaqueles" value="${esc(S.ubi.anaquel)}" placeholder="Ej. A-01-03" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}>
           <datalist id="lista-anaqueles">${activos.map(x => `<option value="${esc(x.codigo)}">${esc(x.desc)}</option>`).join("")}</datalist></div>
         <div class="field"><label for="u-rollo">Rollo</label>
           <input id="u-rollo" class="big" value="${esc(S.ubi.rollo)}" placeholder="Escanea la etiqueta" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}></div>
       </div>
       <div class="form-foot">
-        <span class="next-code">Ubicados <b>${hechos}</b> de <b>${hechos + faltan.length}</b>${faltan.length ? ` · siguiente por ubicar: <b>${faltan[0].codigo}</b>` : ""}</span>
-        ${ok ? `<button class="btn primary" type="submit">Ubicar rollo</button>` : `<span class="note">${u().nombre} no ubica rollos.</span>`}
+        <span class="next-code">Trasladados <b>${hechos}</b> de <b>${hechos + faltan.length}</b>${faltan.length ? ` · siguiente en el muelle: <b>${faltan[0].codigo}</b>` : ""}</span>
+        ${ok ? `<button class="btn primary" type="submit">Trasladar rollo</button>` : `<span class="note">${u().nombre} no traslada rollos.</span>`}
       </div>
-      <p class="note" style="margin:0">En el prototipo puedes escribir el código o usar el botón Ubicar de cada fila de abajo.</p>
+      <p class="note" style="margin:0">En el prototipo puedes escribir el código o usar el botón Trasladar de cada fila de abajo.</p>
     </form></div>`;
 }
+function muelleDe(r) { return r.muelle || MUELLE }
 function tiempoTotal(r) {
   const t = r.t || {};
   if (!t.inicio) return `<span class="note">—</span>`;
@@ -935,7 +950,7 @@ function tablaTiempos(r) {
     ["Verificación", "terminado", "enviado", "Revisión del cuadre y envío al gerente"],
     ["Decisión del gerente", "enviado", "decidido", r.estado === "rechazada" ? "Rechazó la recepción" : "Aprueba o rechaza con el cuadre"],
     ["Liberación", "decidido", "liberado", "Hasta liberar el último rollo"],
-    ["Ubicación en anaqueles", "liberado", "ubicado", "Hasta ubicar el último rollo"],
+    ["Traslado a anaqueles", "liberado", "ubicado", "Hasta trasladar el último rollo"],
   ];
   const corta = r.estado === "rechazada" ? 3 : etapas.length;
   const filas = etapas.slice(0, corta).map(([nombre, de, a, ayuda]) => {
@@ -947,7 +962,7 @@ function tablaTiempos(r) {
   const fin = r.estado === "rechazada" ? t.decidido : t.ubicado;
   return `<div class="card" id="tiempos">
     <h2>Tiempos de la recepción</h2>
-    <p class="sub">Desde que se abre la recepción hasta que se ubica el último rollo. Cada marca la pone el sistema al cambiar de etapa; no se edita.</p>
+    <p class="sub">Desde que se abre la recepción hasta que el último rollo llega a su anaquel. Cada marca la pone el sistema al cambiar de etapa; no se edita.</p>
     <div class="tablewrap"><table class="tiempos">
       <thead><tr><th>Etapa</th><th>Empezó</th><th>Terminó</th><th class="num">Duró</th><th>La cerró</th></tr></thead>
       <tbody>${filas}
@@ -992,9 +1007,9 @@ function vistaPieza() {
       <div><dt>Cantidad actual</dt><dd class="mono">${cant(p.actual, p.un)}</dd></div>
       <div><dt>Dato del fabricante</dt><dd class="mono">${p.fab ? cant(p.fab, p.un) : "No anotado"}</dd></div>
       <div><dt>Recepción</dt><dd><button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button> · ${esc(r.doc)}</dd></div>
-      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}</dd></div>
+      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}${p.estado === "disponible" ? " (anaquel)" : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
     </dl>
-    ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el ${MUELLE.toLowerCase()}. No se vende hasta ubicarlo en su anaquel.</div>`
+    ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el muelle ${esc(p.ubic)}. No se vende hasta trasladarlo a su anaquel.</div>`
       : p.estado === "disponible" ? `<div class="banner ok">Disponible en el anaquel ${esc(p.ubic)}. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
       : ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) ? `<div class="banner warn">No disponible para venta ni picking hasta que se libere.</div>` : `<div class="banner bad">Fuera del inventario. El código queda en el historial y no se reutiliza.</div>`}
   </section>
@@ -1055,9 +1070,9 @@ function cargarEjemplo() {
   if (!D.articulos.some(a => a.tela === "Gabardina stretch"))
     add("Gabardina stretch", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
   if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
-  if (!D.ubicaciones.length) [["A-01-01", "Pasillo A, anaquel 1, nivel 1"], ["A-01-02", "Pasillo A, anaquel 1, nivel 2"], ["B-01-01", "Pasillo B, anaquel 1, nivel 1"]]
-    .forEach(([codigo, desc]) => D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo, desc, activo: true }));
-  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor y 3 anaqueles.";
+  if (!D.ubicaciones.length) [["MUELLE-1", "muelle", "Puerta 1, descarga de contenedores"], ["A-01-01", "anaquel", "Pasillo A, anaquel 1, nivel 1"], ["A-01-02", "anaquel", "Pasillo A, anaquel 1, nivel 2"], ["B-01-01", "anaquel", "Pasillo B, anaquel 1, nivel 1"]]
+    .forEach(([codigo, tipo, desc]) => D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo, tipo, desc, activo: true }));
+  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor, un muelle y 3 anaqueles.";
 }
 
 // ---------------------------------------------------------------- Dibujo y eventos
@@ -1106,7 +1121,8 @@ document.addEventListener("click", e => {
     case "af-cancelar": S.artForm = null; return render();
     case "prov-nuevo": S.provForm = { codigo: "", nombre: "", fiscal: "", pais: "" }; render(); document.getElementById("pf-codigo")?.focus(); return;
     case "prov-cancelar": S.provForm = null; return render();
-    case "ubi-nuevo": S.ubiForm = { codigo: "", desc: "" }; render(); document.getElementById("uf-codigo")?.focus(); return;
+    case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "" }; render(); document.getElementById("uf-codigo")?.focus(); return;
+    case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById("uf-codigo")?.focus(); return;
     case "ubi-cancelar": S.ubiForm = null; return render();
     case "ubi-activar": return hacer(() => ACC_UBI.activar(D.ubicaciones.find(x => x.id === el.dataset.id)));
     case "ubicar-fila": hacer(() => ACC.ubicar(r, el.dataset.cod, S.ubi.anaquel)); return listoParaUbicar();
