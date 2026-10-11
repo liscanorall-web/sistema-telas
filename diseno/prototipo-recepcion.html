@@ -138,7 +138,7 @@ tr.off td { color: var(--muted) }
 .facts div { min-width: 0 }
 .facts dt { font-size: 12px; color: var(--muted) }
 .facts dd { margin: 0; font-weight: 500; overflow-wrap: anywhere }
-.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px }
 .steps li { border-top: 4px solid var(--line); padding-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.3 }
 .steps li.done { border-color: var(--ok); color: var(--ink) }
 .steps li.now { border-color: var(--accent); color: var(--ink); font-weight: 600 }
@@ -155,6 +155,8 @@ tr.off td { color: var(--muted) }
 .decide { display: grid; gap: 12px }
 .decide textarea { min-height: 70px; resize: vertical }
 .acts-row { display: flex; flex-wrap: wrap; gap: 8px }
+.tiempos tr.total td { font-weight: 600; border-top: 2px solid var(--line) }
+.tiempos .curso { color: var(--accent); font-weight: 500 }
 
 /* Etiqueta 100 x 150 mm */
 .label {
@@ -183,7 +185,7 @@ tr.off td { color: var(--muted) }
 .stack { display: grid; gap: 10px; min-width: 0 }
 .lote { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; justify-items: center }
 .lote .label { box-shadow: none }
-@media (max-width: 640px) { .label-view { grid-template-columns: minmax(0, 1fr) } .label { margin: 0 auto } .steps { grid-template-columns: repeat(5, minmax(56px, 1fr)); overflow-x: auto } }
+@media (max-width: 640px) { .label-view { grid-template-columns: minmax(0, 1fr) } .label { margin: 0 auto } .steps { grid-template-columns: repeat(6, minmax(56px, 1fr)); overflow-x: auto } }
 
 .ficha { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); align-items: start }
 @media (max-width: 760px) { .ficha { grid-template-columns: minmax(0, 1fr) } }
@@ -217,48 +219,55 @@ tr.off td { color: var(--muted) }
 <script>
 "use strict";
 // ---------------------------------------------------------------- Personas y permisos de ejemplo
-const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"];
+const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "etiqueta.imprimir"];
 const USERS = {
   admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
-  ana:    { nombre: "Ana Pérez",  rol: "Responsable de recepción", permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "etiqueta.imprimir"] },
-  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "etiqueta.imprimir"] },
+  ana:    { nombre: "Ana Pérez",  rol: "Responsable de recepción", permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir"] },
+  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir"] },
   luis:   { nombre: "Luis Mora",  rol: "Gerente",                  permisos: ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
 };
 const UN = {
   kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
   m:  { nombre: "Metro", corto: "m",  campo: "Metraje",   tope: 150 },
 };
-const UBIC = ["Muelle de recepción", "A-01", "A-02", "A-03", "B-01", "B-02"];
+const MUELLE = "Muelle de recepción";   // donde queda cada rollo desde que se registra hasta que se ubica en su anaquel
 const DOCS = ["Factura", "Orden de compra", "Lista de empaque"];
 const EST_REC = {
   en_preparacion:         ["En registro", "s-info", "Registrar rollos"],
   pendiente_verificacion: ["Por verificar", "s-info", "Revisar y enviar al gerente"],
   pendiente_autorizacion: ["Esperando al gerente", "s-warn", "Aprobar o rechazar"],
   verificada:             ["Aprobada, por liberar", "s-warn", "Liberar rollos"],
+  por_ubicar:             ["Liberada, por ubicar", "s-warn", "Ubicar rollos en anaqueles"],
   cerrada:                ["Cerrada", "s-ok", "Nada"],
   rechazada:              ["Rechazada", "s-bad", "Nada"],
 };
 const EST_PIEZA = {
   en_cuarentena:          ["En cuarentena", "s-warn"],
   pendiente_autorizacion: ["Con incidencia", "s-bad"],
-  liberada:               ["Liberada", "s-ok"],
+  liberada:               ["Liberado, por ubicar", "s-warn"],
+  disponible:             ["Disponible para venta", "s-ok"],
   rechazada:              ["Rechazada", "s-bad"],
   anulada:                ["Anulada", "s-off"],
 };
 const EVENTO = {
   registrada: "Registrado en recepción", etiqueta: "Etiqueta impresa", incidencia: "Incidencia registrada",
-  incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado al inventario",
+  incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado de cuarentena", ubicada: "Ubicado en anaquel",
   rechazada: "Rechazado", anulada: "Anulado",
 };
 
 // ---------------------------------------------------------------- Estado (solo en este navegador)
 const CLAVE = "telas-prototipo-v2";
-const D = { articulos: [], proveedores: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0 } };
+const D = { articulos: [], proveedores: [], ubicaciones: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0 } };
 const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
-            artForm: null, provForm: null, recForm: null,
-            form: { art: "", peso: "", fab: "", ubic: "A-01" }, motivo: "", sel: {} };
+            artForm: null, provForm: null, ubiForm: null, recForm: null,
+            form: { art: "", peso: "", fab: "" }, ubi: { anaquel: "", rollo: "" }, motivo: "", sel: {} };
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
-function cargar() { try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {} }
+function cargar() {
+  try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
+  D.ubicaciones ||= []; D.sec.ubi ||= 0;
+  // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
+  D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
+}
 
 // ---------------------------------------------------------------- Utilidades
 function hoyISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
@@ -266,6 +275,14 @@ function ymd(f) { return f.replaceAll("-", "") }
 function dmy(f) { const [y, m, d] = f.split("-"); return `${d}/${m}/${y}` }
 function ahora() { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` }
 function hoy() { return `${dmy(hoyISO())} ${ahora()}` }
+function horaDe(ms) { const d = new Date(ms); return `${dmy(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` }
+function dur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000)), m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (s < 60) return `${s} s`;
+  if (m < 60) return `${m} min`;
+  if (h < 24) return `${h} h ${m % 60} min`;
+  return `${d} d ${h % 24} h`;
+}
 function n2(n) { return Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function cant(n, un) { return `${n2(n)} ${UN[un].corto}` }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]) }
@@ -460,12 +477,52 @@ function vistaProveedores() {
   </table></div></section>` : ""}`;
 }
 
-// ---------------------------------------------------------------- Módulo 3 · Recepciones
+// ---------------------------------------------------------------- Módulo 3 · Ubicaciones
+function ubiPorCodigo(cod) { return D.ubicaciones.find(x => x.codigo === String(cod).trim().toUpperCase()) }
+const ACC_UBI = {
+  guardar() {
+    exigir("catalogo.editar");
+    const f = S.ubiForm, cod = f.codigo.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla("El código del anaquel lleva letras, números o guion, sin espacios. Por ejemplo A-01-03.");
+    if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada anaquel tiene un código único.`);
+    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, desc: f.desc.trim(), activo: true });
+    S.ubiForm = { codigo: "", desc: "" };
+    return `Anaquel ${cod} creado. Puedes escribir el siguiente.`;
+  },
+  activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se ubican rollos en él.` },
+};
+function vistaUbicaciones() {
+  const editar = puede("catalogo.editar"), f = S.ubiForm;
+  const rollosEn = cod => D.piezas.filter(p => p.estado === "disponible" && p.ubic === cod).length;
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>Los anaqueles del almacén. Cada rollo liberado se ubica en uno de ellos y solo entonces queda disponible para la venta.</p></div>
+    <div class="counts">${editar && !f ? `<button class="btn primary" data-act="ubi-nuevo">Nuevo anaquel</button>` : ""}</div>
+  </section>
+  ${f ? `<section class="card"><h2>Nuevo anaquel</h2><p class="sub">Un código corto, igual al que lleva pegado el anaquel, para escanearlo o escribirlo al ubicar. Un orden útil es pasillo, anaquel y nivel.</p>
+    <form class="form" id="ubi-form"><div class="row2">
+      <div class="field"><label for="uf-codigo">Código del anaquel</label><input id="uf-codigo" class="mono" data-uf="codigo" value="${esc(f.codigo)}" placeholder="Ej. A-01-03" autocomplete="off" style="text-transform:uppercase"></div>
+      <div class="field"><label for="uf-desc">Descripción (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="Ej. Pasillo A, anaquel 1, nivel 3" autocomplete="off"></div></div>
+      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">Guardar anaquel</button></div></div>
+    </form></section>` : ""}
+  ${!D.ubicaciones.length && !f ? `<section class="card empty"><h2>Todavía no hay anaqueles</h2><p>Crea los anaqueles del almacén para poder ubicar los rollos que salen de cada recepción.</p>
+      ${editar ? `<button class="btn primary" data-act="ubi-nuevo">Crear el primer anaquel</button>` : `<p class="note">Los anaqueles los crea el administrador o el gerente.</p>`}</section>` : ""}
+  ${D.ubicaciones.length ? `<section class="card"><div class="tablewrap"><table>
+    <thead><tr><th>Código</th><th>Descripción</th><th>Almacén</th><th class="num">Rollos disponibles</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${D.ubicaciones.map(x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(x.desc)}</td><td>Almacén Principal</td><td class="num">${rollosEn(x.codigo)}</td>
+      <td>${x.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
+      <td>${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}</tbody>
+  </table></div></section>` : ""}`;
+}
+
+// ---------------------------------------------------------------- Módulo 4 · Recepciones
 function siguienteCodigo(fecha, abr, consumir) {
   const k = ymd(fecha) + abr, n = (D.contador[k] || 0) + 1;
   if (consumir) D.contador[k] = n;
   return `${ymd(fecha)}-${abr}-${n < 1000 ? String(n).padStart(3, "0") : n}`;
 }
+// Tiempos: cada etapa guarda cuándo terminó y quién la cerró. Se calculan duraciones, nunca se editan.
+function marcar(r, k) { (r.t ||= {})[k] = { ms: Date.now(), por: S.user } }
 function evento(p, tipo, de, a, nota) { p.eventos.push({ hora: hoy(), tipo, de, a, quien: S.user, nota: nota || "" }) }
 
 function cuadre(r) {
@@ -508,7 +565,8 @@ const ACC = {
       return { art: a.id, esperado: c, rollos: ro };
     });
     const r = { id: "r" + (++D.sec.rec), numero: `REC-${String(D.sec.rec).padStart(6, "0")}`, prov: f.prov, doc: `${f.docTipo} ${f.docNum.trim()}`,
-                fecha: f.fecha, estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null };
+                fecha: f.fecha, estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null, t: {} };
+    marcar(r, "inicio");
     D.recs.push(r);
     S.recForm = null; S.view = "recepcion"; S.rec = r.id; S.form.art = ok[0].art;
     return `Recepción ${r.numero} abierta. Ya puedes registrar los rollos.`;
@@ -524,7 +582,7 @@ const ACC = {
     let fab = null;
     if (f.fab.trim()) { fab = decimal(f.fab); if (!(fab > 0)) throw new Regla("El dato de la etiqueta del fabricante admite hasta 2 decimales.") }
     const p = { codigo: siguienteCodigo(r.fecha, a.abr, true), art: a.id, un: a.un, rec: r.id, cantidad: c, actual: c, fab,
-                estado: "en_cuarentena", ubic: f.ubic, por: S.user, impresiones: 0, eventos: [] };
+                estado: "en_cuarentena", ubic: MUELLE, por: S.user, impresiones: 0, eventos: [] };
     evento(p, "registrada", null, "en_cuarentena");
     D.piezas.push(p); a.usada = true;
     S.form.peso = ""; S.form.fab = "";
@@ -547,13 +605,13 @@ const ACC = {
     exigir("recepcion.verificar");
     if (r.estado !== "en_preparacion") throw new Regla("Solo se cierra el registro de una recepción en registro.");
     if (!piezasDe(r).some(p => p.estado !== "anulada")) throw new Regla("La recepción no tiene rollos registrados.");
-    r.estado = "pendiente_verificacion";
+    r.estado = "pendiente_verificacion"; marcar(r, "terminado");
     return "Registro cerrado. Revisa el cuadre y envíalo al gerente.";
   },
   enviar(r) {
     exigir("recepcion.verificar");
     if (r.estado !== "pendiente_verificacion") throw new Regla("La recepción debe estar por verificar.");
-    r.estado = "pendiente_autorizacion"; r.verificadoPor = S.user;
+    r.estado = "pendiente_autorizacion"; r.verificadoPor = S.user; marcar(r, "enviado");
     return `Enviada al gerente. ${u().nombre} ya no podrá aprobarla (doble control).`;
   },
   decidir(r, decision) {
@@ -567,7 +625,7 @@ const ACC = {
       if (decision === "aprobada" && p.estado === "en_cuarentena") evento(p, "aprobada", p.estado, p.estado, motivo);
       if (decision === "rechazada" && ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado)) { evento(p, "rechazada", p.estado, "rechazada", motivo); p.estado = "rechazada" }
     }
-    r.estado = decision === "aprobada" ? "verificada" : "rechazada"; S.motivo = "";
+    r.estado = decision === "aprobada" ? "verificada" : "rechazada"; S.motivo = ""; marcar(r, "decidido");
     return decision === "aprobada" ? "Recepción aprobada. Los rollos siguen en cuarentena hasta que alguien los libere." : "Recepción rechazada. Sus rollos quedan rechazados y sus códigos no se reutilizan.";
   },
   liberar(r, todas) {
@@ -577,7 +635,7 @@ const ACC = {
     if (!objetivo.length) throw new Regla("Marca al menos un rollo en cuarentena para liberarlo.");
     objetivo.forEach(p => { p.estado = "liberada"; evento(p, "liberada", "en_cuarentena", "liberada"); delete S.sel[p.codigo] });
     intentarCerrar(r);
-    return `${objetivo.length} ${objetivo.length === 1 ? "rollo liberado" : "rollos liberados"} al inventario.${r.estado === "cerrada" ? " La recepción quedó cerrada." : ""}`;
+    return `${objetivo.length} ${objetivo.length === 1 ? "rollo liberado" : "rollos liberados"} de cuarentena.${r.estado === "por_ubicar" ? " Ahora hay que ubicarlos en sus anaqueles; hasta entonces no se pueden vender." : r.estado === "cerrada" ? " La recepción quedó cerrada." : ""}`;
   },
   incidencia(r, p, desc) {
     exigir("recepcion.registrar_pieza");
@@ -599,6 +657,26 @@ const ACC = {
     intentarCerrar(r);
     return aceptar ? `${p.codigo} vuelve a cuarentena con la incidencia anotada.` : `${p.codigo} queda rechazado; su código no se reutiliza.`;
   },
+  ubicar(r, codRollo, codAnaquel) {
+    exigir("pieza.ubicar");
+    if (r.estado !== "por_ubicar") throw new Regla("Los rollos se ubican cuando toda la recepción está liberada.");
+    const x = ubiPorCodigo(codAnaquel || "");
+    if (!x) throw new Regla(codAnaquel?.trim() ? `No existe el anaquel ${codAnaquel.trim().toUpperCase()}. Créalo en Ubicaciones.` : "Primero escanea o escribe el anaquel.");
+    if (!x.activo) throw new Regla(`El anaquel ${x.codigo} está desactivado.`);
+    const q = String(codRollo || "").trim().toUpperCase();
+    if (!q) throw new Regla("Escanea o escribe el código del rollo.");
+    const p = D.piezas.find(z => z.codigo === q);
+    if (!p) throw new Regla(`No existe el rollo ${q}.`);
+    if (p.rec !== r.id) throw new Regla(`El rollo ${q} es de la recepción ${recById(p.rec).numero}, no de esta.`);
+    if (p.estado === "disponible") throw new Regla(`El rollo ${q} ya está ubicado en ${p.ubic}.`);
+    if (p.estado !== "liberada") throw new Regla(`El rollo ${q} está ${EST_PIEZA[p.estado][0].toLowerCase()}: no se ubica.`);
+    evento(p, "ubicada", "liberada", "disponible", `${MUELLE} → ${x.codigo}`);
+    p.ubic = x.codigo; p.estado = "disponible"; S.ubi.rollo = "";
+    if (!r.t?.primeraUbicacion) marcar(r, "primeraUbicacion");
+    intentarCerrar(r);
+    const faltan = piezasDe(r).filter(z => z.estado === "liberada").length;
+    return faltan ? `${q} ubicado en ${x.codigo}. Disponible para venta. Faltan ${faltan}.` : `${q} ubicado en ${x.codigo}. Era el último: recepción cerrada en ${dur(r.t.ubicado.ms - r.t.inicio.ms)} en total.`;
+  },
   anular(r, p) {
     exigir("recepcion.anular");
     if (!["en_preparacion", "pendiente_verificacion"].includes(r.estado)) throw new Regla("Tras enviar la recepción al gerente, los rollos ya no se anulan: se rechazan.");
@@ -613,7 +691,9 @@ function pendientesDeImprimir(r) {
                     .sort((x, y) => x.codigo.localeCompare(y.codigo, "es", { numeric: true }));
 }
 function intentarCerrar(r) {
-  if (r.estado === "verificada" && !piezasDe(r).some(p => ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado))) r.estado = "cerrada";
+  const ps = piezasDe(r);
+  if (r.estado === "verificada" && !ps.some(p => ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado))) { r.estado = "por_ubicar"; marcar(r, "liberado") }
+  if (r.estado === "por_ubicar" && !ps.some(p => p.estado === "liberada")) { r.estado = "cerrada"; marcar(r, "ubicado") }
 }
 
 const pillRec = e => `<span class="pill ${EST_REC[e][1]}">${EST_REC[e][0]}</span>`;
@@ -625,13 +705,15 @@ function vistaRecepciones() {
   const faltan = [];
   if (!D.articulos.some(a => a.activo)) faltan.push(`<button class="link" data-act="ir" data-v="articulos">crear artículos</button>`);
   if (!D.proveedores.length) faltan.push(`<button class="link" data-act="ir" data-v="proveedores">crear un proveedor</button>`);
+  if (!D.ubicaciones.some(x => x.activo)) faltan.push(`<button class="link" data-act="ir" data-v="ubicaciones">crear los anaqueles</button>`);
   const cuenta = k => D.recs.filter(r => r.estado === k).length;
   return `
   <section class="page-head">
-    <div><div class="eyebrow">Paso 3 · Recepción inicial</div><h1>Recepciones</h1><p>Cada recepción parte del documento del proveedor y solo admite artículos del catálogo.</p></div>
+    <div><div class="eyebrow">Paso 4 · Recepción inicial</div><h1>Recepciones</h1><p>Cada recepción parte del documento del proveedor y solo admite artículos del catálogo.</p></div>
     <div class="counts">
       ${D.recs.length ? `<span class="pill s-info">En registro: ${cuenta("en_preparacion") + cuenta("pendiente_verificacion")}</span>
-      <span class="pill s-warn">Esperando al gerente: ${cuenta("pendiente_autorizacion")}</span>` : ""}
+      <span class="pill s-warn">Esperando al gerente: ${cuenta("pendiente_autorizacion")}</span>
+      <span class="pill s-warn">Por ubicar: ${cuenta("por_ubicar")}</span>` : ""}
       ${!S.recForm && puede("recepcion.crear") && !faltan.length ? `<button class="btn primary" data-act="rec-nueva">Nueva recepción</button>` : ""}
     </div>
   </section>
@@ -640,12 +722,12 @@ function vistaRecepciones() {
   ${!D.recs.length && !S.recForm ? `<section class="card empty"><h2>Todavía no hay recepciones</h2><p>Abre una con el documento del proveedor: qué artículos facturó, cuántos kilos o metros y cuántos rollos.</p>
       ${!faltan.length && puede("recepcion.crear") ? `<button class="btn primary" data-act="rec-nueva">Abrir la primera recepción</button>` : ""}</section>` : ""}
   ${D.recs.length ? `<section class="card"><div class="tablewrap"><table>
-      <thead><tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Documento</th><th class="num">Rollos</th><th class="num">Facturado</th><th class="num">Recibido</th><th>Estado</th><th>Siguiente paso</th></tr></thead>
+      <thead><tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Documento</th><th class="num">Rollos</th><th class="num">Facturado</th><th class="num">Recibido</th><th>Estado</th><th>Siguiente paso</th><th class="num">Tiempo</th></tr></thead>
       <tbody>${[...D.recs].reverse().map(r => { const c = cuadre(r); return `
         <tr class="click" data-act="abrir" data-id="${r.id}" tabindex="0">
           <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}</td>
           <td class="num">${c.registradas}${c.rollos ? ` / ${c.rollos}` : ""}</td><td class="num">${porUnidad(c.lineas, l => l.esperado)}</td><td class="num">${porUnidad(c.lineas, l => l.recibido)}</td>
-          <td>${pillRec(r.estado)}</td><td class="note">${EST_REC[r.estado][2]}</td></tr>` }).join("")}
+          <td>${pillRec(r.estado)}</td><td class="note">${EST_REC[r.estado][2]}</td><td class="num">${tiempoTotal(r)}</td></tr>` }).join("")}
       </tbody></table></div></section>` : ""}`;
 }
 
@@ -678,8 +760,8 @@ function formRecepcion() {
 }
 
 function pasos(r) {
-  const orden = ["en_preparacion", "pendiente_verificacion", "pendiente_autorizacion", "verificada", "cerrada"];
-  const nombres = [["Registro", "Cada rollo"], ["Verificación", "Responsable revisa"], ["Gerente", "Aprueba con el cuadre"], ["Liberación", "Persona autorizada"], ["Cerrada", "Todo liberado"]];
+  const orden = ["en_preparacion", "pendiente_verificacion", "pendiente_autorizacion", "verificada", "por_ubicar", "cerrada"];
+  const nombres = [["Registro", "Cada rollo"], ["Verificación", "Responsable revisa"], ["Gerente", "Aprueba con el cuadre"], ["Liberación", "Persona autorizada"], ["Ubicación", "Cada rollo a su anaquel"], ["Cerrada", "Disponible para venta"]];
   const i = orden.indexOf(r.estado);
   if (i < 0) return "";
   return `<ol class="steps" aria-label="Etapas de la recepción">${nombres.map((n, k) =>
@@ -696,7 +778,10 @@ function siguiente(r) {
       <div class="acts">${puede("recepcion.aprobar") ? `<a class="btn primary" href="#decision" data-act="ir-a" data-to="decision">Ir a la decisión</a>` : sin("Decide el gerente.")}</div></div>`;
     case "verificada": return `<div class="next"><p><b>Aprobada por ${quien(r.decision?.por)}.</b> Los rollos siguen en cuarentena: no se venden ni se separan hasta que una persona autorizada los libere.</p>
       <div class="acts">${puede("pieza.liberar") ? `<a class="btn primary" href="#liberar" data-act="ir-a" data-to="liberar">Ir a liberar</a>` : sin("Libera el gerente.")}</div></div>`;
-    case "cerrada": return `<div class="banner ok">Recepción cerrada. Aprobada por ${quien(r.decision?.por)} el ${r.decision?.hora}. Todos sus rollos están liberados o resueltos.</div>`;
+    case "por_ubicar": { const ps = piezasDe(r), hechos = ps.filter(p => p.estado === "disponible").length, total = hechos + ps.filter(p => p.estado === "liberada").length;
+      return `<div class="next"><p><b>Ubica cada rollo en su anaquel.</b> Llevas ${hechos} de ${total}. Están liberados pero siguen en el ${MUELLE.toLowerCase()} y no se venden hasta ubicarlos. Al ubicar el último, la recepción se cierra.</p>
+      <div class="acts">${puede("pieza.ubicar") ? `<a class="btn primary" href="#ubicar" data-act="ir-a" data-to="ubicar">Ir a ubicar</a>` : sin("Ubica el personal de almacén.")}</div></div>` }
+    case "cerrada": return `<div class="banner ok">Recepción cerrada${r.t?.ubicado && r.t?.inicio ? ` en ${dur(r.t.ubicado.ms - r.t.inicio.ms)}, desde que se abrió hasta la última ubicación` : ""}. Aprobada por ${quien(r.decision?.por)} el ${r.decision?.hora}. Sus rollos están en sus anaqueles y disponibles para la venta.</div>`;
     case "rechazada": return `<div class="banner bad">Rechazada por ${quien(r.decision?.por)}: ${esc(r.decision?.motivo)}. Los rollos quedan rechazados y sus códigos no se reutilizan.</div>`;
   }
   return "";
@@ -730,12 +815,9 @@ function formRegistro(r) {
         <select id="f-art" ${ok ? "" : "disabled"}>${r.lineas.map(l => { const x = art(l.art); return `<option value="${x.id}" ${x.id === f.art ? "selected" : ""}>${x.abr} · ${esc(nombreArt(x))} (por ${UN[x.un].nombre.toLowerCase()})</option>` }).join("")}</select></div>
       <div class="field"><label for="f-peso">${U.campo} (${U.corto})</label>
         <input id="f-peso" class="big" inputmode="decimal" placeholder="${a.un === "kg" ? "Ej. 25,40" : "Ej. 50,00"}" value="${esc(f.peso)}" ${ok ? "" : "disabled"} autocomplete="off"></div>
-      <div class="row2">
-        <div class="field"><label for="f-fab">${U.campo} en etiqueta del fabricante (opcional)</label>
-          <input id="f-fab" inputmode="decimal" placeholder="Opcional" value="${esc(f.fab)}" ${ok ? "" : "disabled"} autocomplete="off"></div>
-        <div class="field"><label for="f-ubic">Ubicación</label>
-          <select id="f-ubic" ${ok ? "" : "disabled"}>${UBIC.map(x => `<option ${x === f.ubic ? "selected" : ""}>${x}</option>`).join("")}</select></div>
-      </div>
+      <div class="field"><label for="f-fab">${U.campo} en etiqueta del fabricante (opcional)</label>
+        <input id="f-fab" inputmode="decimal" placeholder="Opcional" value="${esc(f.fab)}" ${ok ? "" : "disabled"} autocomplete="off">
+        <span class="hint">El rollo queda en el ${MUELLE.toLowerCase()}. El anaquel se elige al final, cuando ya está liberado.</span></div>
       <div class="form-foot">
         <span class="next-code">Código que recibirá: <b>${siguienteCodigo(r.fecha, a.abr, false)}</b></span>
         ${ok ? `<button class="btn primary" type="submit">Guardar rollo</button>` : `<span class="note">${u().nombre} no registra rollos.</span>`}
@@ -786,6 +868,7 @@ function tablaPiezas(r) {
         <td>${pillPieza(p.estado)}</td>
         <td>${p.impresiones ? `<span class="note">Impresa${p.impresiones > 1 ? ` ×${p.impresiones}` : ""}</span>` : `<span class="pill s-warn">Sin imprimir</span>`}</td>
         <td><div class="acts-row" style="flex-wrap:nowrap">
+          ${p.estado === "liberada" && r.estado === "por_ubicar" && puede("pieza.ubicar") ? `<button class="btn small primary" data-act="ubicar-fila" data-cod="${p.codigo}">Ubicar${S.ubi.anaquel ? ` en ${esc(S.ubi.anaquel.toUpperCase())}` : ""}</button>` : ""}
           <button class="btn small" data-act="etiqueta" data-cod="${p.codigo}">Etiqueta</button>
           ${p.estado === "en_cuarentena" && puede("recepcion.registrar_pieza") && !["cerrada", "rechazada"].includes(r.estado) ? `<button class="btn small" data-act="inc" data-cod="${p.codigo}">Incidencia</button>` : ""}
           ${["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) && puede("recepcion.anular") && ["en_preparacion", "pendiente_verificacion"].includes(r.estado) ? `<button class="btn small danger" data-act="anular" data-cod="${p.codigo}">Anular</button>` : ""}
@@ -809,9 +892,67 @@ function vistaRecepcion() {
     ${siguiente(r)}
   </section>
   ${r.estado === "en_preparacion" ? `<div class="grid2">${formRegistro(r)}${tablaCuadre(r)}</div>` : tablaCuadre(r)}
+  ${panelUbicar(r)}
   ${panelDecision(r)}
   ${panelIncidencias(r)}
-  ${tablaPiezas(r)}`;
+  ${tablaPiezas(r)}
+  ${tablaTiempos(r)}`;
+}
+function panelUbicar(r) {
+  if (r.estado !== "por_ubicar") return "";
+  const ok = puede("pieza.ubicar"), ps = piezasDe(r), faltan = ps.filter(p => p.estado === "liberada"), hechos = ps.filter(p => p.estado === "disponible").length;
+  const activos = D.ubicaciones.filter(x => x.activo);
+  return `<div class="card" id="ubicar">
+    <h2>Ubicar rollos en anaqueles</h2>
+    <p class="sub">Escanea el anaquel y después cada rollo que pones en él. El anaquel se queda puesto hasta que escanees otro. Cada rollo ubicado queda disponible para la venta.</p>
+    ${!activos.length ? `<p class="banner warn">No hay anaqueles activos. <button class="link" data-act="ir" data-v="ubicaciones">Crea los anaqueles</button> para poder ubicar.</p>` : ""}
+    <form class="form" id="ubic-form">
+      <div class="row2">
+        <div class="field"><label for="u-anaquel">Anaquel</label>
+          <input id="u-anaquel" class="big" list="lista-anaqueles" value="${esc(S.ubi.anaquel)}" placeholder="Ej. A-01-03" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}>
+          <datalist id="lista-anaqueles">${activos.map(x => `<option value="${esc(x.codigo)}">${esc(x.desc)}</option>`).join("")}</datalist></div>
+        <div class="field"><label for="u-rollo">Rollo</label>
+          <input id="u-rollo" class="big" value="${esc(S.ubi.rollo)}" placeholder="Escanea la etiqueta" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}></div>
+      </div>
+      <div class="form-foot">
+        <span class="next-code">Ubicados <b>${hechos}</b> de <b>${hechos + faltan.length}</b>${faltan.length ? ` · siguiente por ubicar: <b>${faltan[0].codigo}</b>` : ""}</span>
+        ${ok ? `<button class="btn primary" type="submit">Ubicar rollo</button>` : `<span class="note">${u().nombre} no ubica rollos.</span>`}
+      </div>
+      <p class="note" style="margin:0">En el prototipo puedes escribir el código o usar el botón Ubicar de cada fila de abajo.</p>
+    </form></div>`;
+}
+function tiempoTotal(r) {
+  const t = r.t || {};
+  if (!t.inicio) return `<span class="note">—</span>`;
+  const fin = t.ubicado || (r.estado === "rechazada" ? t.decidido : null);
+  return fin ? dur(fin.ms - t.inicio.ms) : `<span class="note">lleva ${dur(Date.now() - t.inicio.ms)}</span>`;
+}
+function tablaTiempos(r) {
+  const t = r.t || {};
+  if (!t.inicio) return `<div class="card"><h2>Tiempos de la recepción</h2><p class="sub" style="margin:0">Esta recepción se creó antes de que existiera el registro de tiempos.</p></div>`;
+  const etapas = [
+    ["Registro de rollos", "inicio", "terminado", "Desde que se abre hasta que se cierra el registro"],
+    ["Verificación", "terminado", "enviado", "Revisión del cuadre y envío al gerente"],
+    ["Decisión del gerente", "enviado", "decidido", r.estado === "rechazada" ? "Rechazó la recepción" : "Aprueba o rechaza con el cuadre"],
+    ["Liberación", "decidido", "liberado", "Hasta liberar el último rollo"],
+    ["Ubicación en anaqueles", "liberado", "ubicado", "Hasta ubicar el último rollo"],
+  ];
+  const corta = r.estado === "rechazada" ? 3 : etapas.length;
+  const filas = etapas.slice(0, corta).map(([nombre, de, a, ayuda]) => {
+    const ini = t[de], fin = t[a];
+    if (!ini) return `<tr><td>${nombre}<br><span class="note">${ayuda}</span></td><td class="note">Sin empezar</td><td></td><td class="num"></td><td></td></tr>`;
+    return `<tr><td>${nombre}<br><span class="note">${ayuda}</span></td><td>${horaDe(ini.ms)}</td><td>${fin ? horaDe(fin.ms) : `<span class="curso">En curso</span>`}</td>
+      <td class="num">${fin ? dur(fin.ms - ini.ms) : `<span class="curso">lleva ${dur(Date.now() - ini.ms)}</span>`}</td><td>${fin ? quien(fin.por) : ""}</td></tr>`;
+  }).join("");
+  const fin = r.estado === "rechazada" ? t.decidido : t.ubicado;
+  return `<div class="card" id="tiempos">
+    <h2>Tiempos de la recepción</h2>
+    <p class="sub">Desde que se abre la recepción hasta que se ubica el último rollo. Cada marca la pone el sistema al cambiar de etapa; no se edita.</p>
+    <div class="tablewrap"><table class="tiempos">
+      <thead><tr><th>Etapa</th><th>Empezó</th><th>Terminó</th><th class="num">Duró</th><th>La cerró</th></tr></thead>
+      <tbody>${filas}
+        <tr class="total"><td>Total</td><td>${horaDe(t.inicio.ms)}</td><td>${fin ? horaDe(fin.ms) : `<span class="curso">En curso</span>`}</td><td class="num">${fin ? dur(fin.ms - t.inicio.ms) : `<span class="curso">lleva ${dur(Date.now() - t.inicio.ms)}</span>`}</td><td></td></tr>
+      </tbody></table></div></div>`;
 }
 
 // ---------------------------------------------------------------- Etiqueta y ficha
@@ -835,7 +976,7 @@ function etiqueta(p) {
     <div class="l-qr">${qrSvg(textoQR(p))}</div>
     <div class="l-art"><b>${esc(a.codigo)}</b><br>${esc(nombreArt(a))}${a.ancho ? ` · ${String(a.ancho).replace(".", ",")} cm` : ""}</div>
     <div class="l-kg"><span>${UN[p.un].campo}</span><strong>${cant(p.cantidad, p.un)}</strong></div>
-    <div class="l-foot"><span>Recibido ${dmy(r.fecha)}</span><span>Ubic. ${esc(p.ubic)}</span></div>
+    <div class="l-foot"><span>Recibido ${dmy(r.fecha)}</span><span>${UN[p.un].nombre === "Kilo" ? "Por kilo" : "Por metro"}</span></div>
   </div>`;
 }
 function vistaPieza() {
@@ -853,7 +994,8 @@ function vistaPieza() {
       <div><dt>Recepción</dt><dd><button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button> · ${esc(r.doc)}</dd></div>
       <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}</dd></div>
     </dl>
-    ${p.estado === "liberada" ? `<div class="banner ok">Disponible. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
+    ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el ${MUELLE.toLowerCase()}. No se vende hasta ubicarlo en su anaquel.</div>`
+      : p.estado === "disponible" ? `<div class="banner ok">Disponible en el anaquel ${esc(p.ubic)}. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
       : ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) ? `<div class="banner warn">No disponible para venta ni picking hasta que se libere.</div>` : `<div class="banner bad">Fuera del inventario. El código queda en el historial y no se reutiliza.</div>`}
   </section>
   <div class="ficha">
@@ -907,12 +1049,15 @@ function modal() {
 function cargarEjemplo() {
   const add = (tela, un, ancho, comp, tope, filas) => filas.forEach(([color, codigo, abr]) =>
     D.articulos.push({ id: "a" + (++D.sec.art), tela, color, codigo, abr, un, ancho, comp, tope, activo: true, usada: false }));
+  D.sec.ubi ||= 0;
   if (!D.articulos.some(a => a.tela === "Microfibra unicolor"))
     add("Microfibra unicolor", "kg", 150, "100% poliéster", 60, [["Blanco", "MFU-001", "MUB"], ["Negro", "MFU-002", "MUN"], ["Rojo", "MFU-003", "MUR"], ["Azul rey", "MFU-004", "MUA"]]);
   if (!D.articulos.some(a => a.tela === "Gabardina stretch"))
     add("Gabardina stretch", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
   if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
-  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores y un proveedor.";
+  if (!D.ubicaciones.length) [["A-01-01", "Pasillo A, anaquel 1, nivel 1"], ["A-01-02", "Pasillo A, anaquel 1, nivel 2"], ["B-01-01", "Pasillo B, anaquel 1, nivel 1"]]
+    .forEach(([codigo, desc]) => D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo, desc, activo: true }));
+  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor y 3 anaqueles.";
 }
 
 // ---------------------------------------------------------------- Dibujo y eventos
@@ -924,9 +1069,9 @@ function toast(msg, error) {
 }
 function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
 function render() {
-  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["recepciones", "3", "Recepciones", D.recs.length]];
+  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["recepciones", "4", "Recepciones", D.recs.length]];
   $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
-  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, recepciones: vistaRecepciones, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, recepciones: vistaRecepciones, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
   $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
   $modal.innerHTML = modal();
 }
@@ -936,6 +1081,7 @@ function hacer(fn) {
 }
 function ir(view, extra) { Object.assign(S, { view, modal: null }, extra); render(); window.scrollTo(0, 0); listoParaPesar() }
 function listoParaPesar() { document.getElementById("f-peso")?.focus({ preventScroll: true }) }
+function listoParaUbicar() { document.getElementById(S.ubi.anaquel.trim() ? "u-rollo" : "u-anaquel")?.focus({ preventScroll: true }) }
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]");
@@ -949,8 +1095,8 @@ document.addEventListener("click", e => {
     case "ejemplo": return hacer(cargarEjemplo);
     case "borrar": S.modal = { tipo: "borrar" }; return render();
     case "borrar-ok": try { localStorage.removeItem(CLAVE) } catch (x) {}
-      Object.assign(D, { articulos: [], proveedores: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0 } });
-      Object.assign(S, { artForm: null, provForm: null, recForm: null }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
+      Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0 } });
+      Object.assign(S, { artForm: null, provForm: null, ubiForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
     case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-tela")?.focus(); return;
     case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
     case "art-activar": return hacer(() => ACC_ART.activar(art(el.dataset.id)));
@@ -960,6 +1106,10 @@ document.addEventListener("click", e => {
     case "af-cancelar": S.artForm = null; return render();
     case "prov-nuevo": S.provForm = { codigo: "", nombre: "", fiscal: "", pais: "" }; render(); document.getElementById("pf-codigo")?.focus(); return;
     case "prov-cancelar": S.provForm = null; return render();
+    case "ubi-nuevo": S.ubiForm = { codigo: "", desc: "" }; render(); document.getElementById("uf-codigo")?.focus(); return;
+    case "ubi-cancelar": S.ubiForm = null; return render();
+    case "ubi-activar": return hacer(() => ACC_UBI.activar(D.ubicaciones.find(x => x.id === el.dataset.id)));
+    case "ubicar-fila": hacer(() => ACC.ubicar(r, el.dataset.cod, S.ubi.anaquel)); return listoParaUbicar();
     case "rec-nueva": abrirFormRecepcion(); return render();
     case "rf-linea": S.recForm.lineas.push({ art: "", cant: "", rollos: "" }); return render();
     case "rf-quitar": S.recForm.lineas.splice(+el.dataset.row, 1); return render();
@@ -998,6 +1148,9 @@ document.addEventListener("input", e => {
     return refrescarSugerencias();
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
+  if (ds.uf) { S.ubiForm[ds.uf] = t.value; return }
+  if (t.id === "u-anaquel") { S.ubi.anaquel = t.value; return }
+  if (t.id === "u-rollo") { S.ubi.rollo = t.value; return }
   if (ds.rf) { S.recForm[ds.rf] = t.value; return }
   if (ds.rl !== undefined && ds.col !== "art") { S.recForm.lineas[+ds.rl][ds.col] = t.value; return }
   if (t.id === "f-peso") S.form.peso = t.value;
@@ -1010,8 +1163,7 @@ document.addEventListener("change", e => {
   if (ds.rl !== undefined && ds.col === "art") { S.recForm.lineas[+ds.rl].art = t.value; return render() }
   if (ds.rf) { S.recForm[ds.rf] = t.value; return }
   if (t.id === "f-art") { S.form.art = t.value; S.form.peso = ""; S.form.fab = ""; render(); return listoParaPesar() }
-  if (t.id === "f-ubic") S.form.ubic = t.value;
-  else if (ds.sel) S.sel[ds.sel] = t.checked;
+  if (ds.sel) S.sel[ds.sel] = t.checked;
   else if (t.id === "user") { S.user = t.value; S.motivo = ""; render(); toast(`Ahora ves la aplicación como ${u().nombre}, ${u().rol.toLowerCase()}.`) }
 });
 document.addEventListener("submit", e => {
@@ -1019,6 +1171,12 @@ document.addEventListener("submit", e => {
   const id = e.target.id;
   if (id === "art-form") return hacer(ACC_ART.guardar);
   if (id === "prov-form") return hacer(ACC_PROV.guardar);
+  if (id === "ubi-form") { hacer(ACC_UBI.guardar); return document.getElementById("uf-codigo")?.focus() }
+  if (id === "ubic-form") {
+    // Escáner: tras leer el anaquel, el foco pasa al rollo; tras cada rollo, vuelve al rollo.
+    if (S.ubi.anaquel.trim() && !S.ubi.rollo.trim() && document.activeElement?.id === "u-anaquel") return document.getElementById("u-rollo")?.focus();
+    hacer(() => ACC.ubicar(recById(S.rec), S.ubi.rollo, S.ubi.anaquel)); return listoParaUbicar();
+  }
   if (id === "rec-form") { hacer(ACC.crearRecepcion); return listoParaPesar() }
   if (id === "reg") { hacer(() => ACC.registrar(recById(S.rec))); return listoParaPesar() }
   if (id === "scan-form") {
