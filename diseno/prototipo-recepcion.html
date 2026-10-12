@@ -184,6 +184,19 @@ tr.off td { color: var(--muted) }
 .label.ubi .u-partes span { font-size: 8px; letter-spacing: .08em; text-transform: uppercase }
 .label.ubi .u-partes b { font: 700 clamp(20px, 13cqi, 38px)/1 var(--f-display) }
 
+/* Pasillos y racks plegables */
+.fold { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 0; cursor: pointer; text-align: left; min-width: 0 }
+.fold .chev { display: inline-block; width: 18px; font-size: 14px; color: var(--muted); transition: transform .15s }
+.fold[aria-expanded="true"] .chev { transform: rotate(90deg) }
+.fold .fold-t { display: block; font: 700 22px/1.1 var(--f-display) }
+.fold.chico .fold-t { font-size: 17px }
+.fold .fold-r { display: block }
+.fold:hover .fold-t { color: var(--accent) }
+.racks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 10px; padding-left: 28px; border-left: 2px solid var(--line); margin-left: 8px }
+.rack { min-width: 0 }
+.rack + .rack { border-top: 1px solid var(--line); padding-top: 6px }
+@media (max-width: 640px) { .racks { padding-left: 12px; margin-left: 4px } }
+
 /* Ventana */
 .scrim { position: fixed; inset: 0; background: rgba(10,14,20,.55); z-index: 40; display: grid; place-items: center; padding: 16px; overflow-y: auto }
 .dialog { background: var(--surface); border-radius: 12px; max-width: 760px; width: 100%; padding: 20px; display: grid; gap: 16px; box-shadow: var(--shadow); max-height: calc(100vh - 32px); overflow-y: auto }
@@ -503,6 +516,7 @@ const ACC_UBI = {
       if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada ubicación tiene un código único.`);
       D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "muelle", desc: f.desc.trim(), activo: true });
       S.ubiForm = { ...f, codigo: "", desc: "" };
+      UI.abiertos.muelles = true; guardarUI();
       return `Muelle ${cod} creado.`;
     }
     const pasillo = entero(f.pasillo, 1, 99), rack = entero(f.rack, 1, 99), divs = entero(f.divs, 1, 20);
@@ -518,11 +532,27 @@ const ACC_UBI = {
     }
     if (!nuevos.length) throw new Regla(`El rack ${rack} del pasillo ${pasillo} ya tiene sus ${divs} anaqueles. Para agregar divisiones, sube el número.`);
     S.ubiForm = { ...f, rack: String(rack + 1), desc: "" };
+    UI.abiertos[`p${pasillo}`] = true; UI.abiertos[`p${pasillo}-r${rack}`] = true; guardarUI();
     return `Rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""} Imprime sus etiquetas y pégalas en cada división.`;
   },
   activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se usa en recepciones ni traslados nuevos.` },
 };
 function ubisActivas(tipo) { return D.ubicaciones.filter(x => x.activo && x.tipo === tipo).sort((a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true })) }
+// Qué pasillos y racks están desplegados: preferencia de cada persona, guardada en su navegador.
+const CLAVE_UI = "telas-prototipo-ui";
+const UI = { abiertos: {} };
+try { Object.assign(UI, JSON.parse(localStorage.getItem(CLAVE_UI) || "{}")) } catch (e) {}
+function guardarUI() { try { localStorage.setItem(CLAVE_UI, JSON.stringify(UI)) } catch (e) {} }
+function abierto(k) { return !!UI.abiertos[k] }
+function plegable(k, titulo, resumen, chico) {
+  return `<button class="fold${chico ? " chico" : ""}" data-act="fold" data-k="${k}" aria-expanded="${abierto(k)}"><span class="chev" aria-hidden="true">▸</span>
+    <span><span class="fold-t">${titulo}</span><span class="note fold-r">${resumen}</span></span></button>`;
+}
+function resumenUbi(xs, racks) {
+  const rollos = xs.reduce((n, x) => n + D.piezas.filter(p => p.ubic === x.codigo && ["liberada", "disponible", "en_cuarentena", "pendiente_autorizacion"].includes(p.estado)).length, 0);
+  const sin = xs.filter(x => x.activo && !x.impresiones).length;
+  return [racks != null ? `${racks} ${racks === 1 ? "rack" : "racks"}` : "", `${xs.length} ${xs.length === 1 ? "anaquel" : "anaqueles"}`, `${rollos} ${rollos === 1 ? "rollo" : "rollos"}`, sin ? `${sin} sin etiqueta` : ""].filter(Boolean).join(" · ");
+}
 function vistaUbicaciones() {
   const editar = puede("catalogo.editar"), f = S.ubiForm;
   const rollosEn = cod => D.piezas.filter(p => ["en_cuarentena", "pendiente_autorizacion", "liberada", "disponible"].includes(p.estado) && p.ubic === cod).length;
@@ -561,11 +591,16 @@ function vistaUbicaciones() {
       <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">${f.tipo === "muelle" ? "Guardar muelle" : "Crear anaqueles"}</button></div></div>
     </form></section>` : ""}
   <section class="card">
-    <div class="grupo-head"><h2>Muelles de recepción</h2><div class="counts"><span class="note">${TIPO_UBI.muelle[1]}</span>${botonLote(muelles.filter(x => x.activo), "Etiquetas de los muelles", "Muelles")}</div></div>
-    ${muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">Todavía no hay muelles. Hace falta al menos uno para abrir una recepción.</p>`}</section>
-  ${Object.keys(pasillos).sort((a, b) => a - b).map(p => `<section class="card">
-    <div class="grupo-head"><h2>Pasillo ${p}</h2><div class="counts"><span class="note">${Object.keys(pasillos[p]).length} ${Object.keys(pasillos[p]).length === 1 ? "rack" : "racks"} · ${Object.values(pasillos[p]).flat().length} anaqueles</span>${botonLote(Object.values(pasillos[p]).flat().filter(x => x.activo), "Etiquetas del pasillo", `Pasillo ${p}`)}</div></div>
-    ${Object.keys(pasillos[p]).sort((a, b) => a - b).map(r => `<div class="form-foot" style="margin:12px 0 4px"><h3 class="eyebrow" style="margin:0">Rack ${r}</h3>${botonLote(pasillos[p][r].filter(x => x.activo), "Etiquetas del rack", `Pasillo ${p} · Rack ${r}`)}</div>${tabla(pasillos[p][r], "Ubicación")}`).join("")}</section>`).join("")}
+    <div class="grupo-head">${plegable("muelles", "Muelles de recepción", `${muelles.length} ${muelles.length === 1 ? "muelle" : "muelles"} · ${muelles.reduce((n, x) => n + rollosEn(x.codigo), 0)} rollos`)}
+      <div class="counts">${botonLote(muelles.filter(x => x.activo), "Etiquetas de los muelles", "Muelles")}</div></div>
+    ${abierto("muelles") ? (muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">Todavía no hay muelles. Hace falta al menos uno para abrir una recepción.</p>`) : ""}</section>
+  ${Object.keys(pasillos).length > 1 || Object.values(pasillos).some(ps => Object.keys(ps).length > 1) ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-abrir="0">Plegar todo</button></div>` : ""}
+  ${Object.keys(pasillos).sort((a, b) => a - b).map(p => { const racks = pasillos[p], todos = Object.values(racks).flat(), kp = `p${p}`; return `<section class="card">
+    <div class="grupo-head">${plegable(kp, `Pasillo ${p}`, resumenUbi(todos, Object.keys(racks).length))}
+      <div class="counts">${botonLote(todos.filter(x => x.activo), "Etiquetas del pasillo", `Pasillo ${p}`)}</div></div>
+    ${abierto(kp) ? `<div class="racks">${Object.keys(racks).sort((a, b) => a - b).map(r => { const kr = `p${p}-r${r}`; return `<div class="rack">
+      <div class="form-foot">${plegable(kr, `Rack ${r}`, resumenUbi(racks[r]), true)}${botonLote(racks[r].filter(x => x.activo), "Etiquetas del rack", `Pasillo ${p} · Rack ${r}`)}</div>
+      ${abierto(kr) ? tabla(racks[r], "Ubicación") : ""}</div>` }).join("")}</div>` : ""}</section>` }).join("")}
   ${sueltos.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles sin pasillo</h2><span class="note">Creados antes de ordenar por pasillo y rack</span></div>${tabla(sueltos, "Descripción")}</section>` : ""}
   ${!anaq.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles</h2></div><p class="note" style="margin:0">Todavía no hay anaqueles. Crea los racks de cada pasillo para poder trasladar los rollos y dejarlos disponibles para la venta.</p></section>` : ""}`;
 }
@@ -1310,7 +1345,7 @@ document.addEventListener("click", e => {
     case "ficha": return ir("pieza", { pieza: el.dataset.cod, rec: pz.rec });
     case "ejemplo": return hacer(cargarEjemplo);
     case "borrar": S.modal = { tipo: "borrar" }; return render();
-    case "borrar-ok": try { localStorage.removeItem(CLAVE) } catch (x) {}
+    case "borrar-ok": try { localStorage.removeItem(CLAVE); localStorage.removeItem(CLAVE_UI) } catch (x) {} UI.abiertos = {};
       Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } });
       Object.assign(S, { artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
     case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-tela")?.focus(); return;
@@ -1324,6 +1359,10 @@ document.addEventListener("click", e => {
     case "prov-cancelar": S.provForm = null; return render();
     case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "", pasillo: "1", rack: "1", divs: "3" }; render(); document.getElementById("uf-codigo")?.focus(); return;
     case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById(S.ubiForm.tipo === "muelle" ? "uf-codigo" : "uf-pasillo")?.focus(); return;
+    case "fold": UI.abiertos[el.dataset.k] = !abierto(el.dataset.k); guardarUI(); return render();
+    case "fold-todo": { const abrir = el.dataset.abrir === "1"; UI.abiertos = {};
+      if (abrir) { UI.abiertos.muelles = true; D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[`p${x.pasillo}`] = true; UI.abiertos[`p${x.pasillo}-r${x.rack}`] = true }) }
+      guardarUI(); return render() }
     case "ubi-etq": abrirEtiquetasUbi(el.dataset.cods.split(" "), el.dataset.tit); return render();
     case "ubi-etq-ok": return hacer(() => { const msg = ACC_ETQ.imprimir(S.modal.codigos); S.modal = null; return msg });
     case "ubi-cancelar": S.ubiForm = null; return render();
