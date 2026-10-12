@@ -398,6 +398,97 @@ const ACC_ART = {
   activar(a) { exigir("catalogo.editar"); a.activo = !a.activo; return a.activo ? `${a.codigo} activo de nuevo.` : `${a.codigo} desactivado: no aparece en compras ni recepciones nuevas.` },
 };
 
+// Edición del catálogo: cambia nombres y datos comunes, nunca códigos ni abreviaturas. Cada cambio queda anotado en el artículo.
+function anotar(a, que) { (a.cambios ||= []).push({ hora: hoy(), quien: S.user, que }) }
+const limpioNombre = t => t.trim().replace(/\s+/g, " ").replace(/^./, c => c.toUpperCase());
+const ACC_EDIT = {
+  linea(viejo, nuevo) {
+    exigir("catalogo.editar");
+    nuevo = limpioNombre(nuevo);
+    if (!nuevo) throw new Regla("Escribe el nombre de la línea.");
+    const existente = D.articulos.find(a => lineaDe(a) !== viejo && lineaDe(a).toLowerCase() === nuevo.toLowerCase());
+    if (existente) nuevo = lineaDe(existente);
+    if (nuevo === viejo) throw new Regla("El nombre no cambió.");
+    const mios = D.articulos.filter(a => lineaDe(a) === viejo);
+    const otros = new Set(D.articulos.filter(a => lineaDe(a) !== viejo).map(a => a.tela.toLowerCase()));
+    const choque = mios.find(a => otros.has(nombreTela(nuevo, a.categoria).toLowerCase()));
+    if (choque) throw new Regla(`${nuevo} ya tiene la categoría ${choque.categoria || choque.tela}. Cambia antes el nombre de una de las dos.`);
+    mios.forEach(a => { anotar(a, `Línea: ${viejo} → ${nuevo}`); a.linea = nuevo; a.tela = nombreTela(nuevo, a.categoria) });
+    return existente ? `Las categorías de ${viejo} pasaron a la línea ${nuevo}.` : `Línea renombrada: ${viejo} → ${nuevo}.`;
+  },
+  categoria(tela, m) {
+    exigir("catalogo.editar");
+    const g = D.articulos.filter(a => a.tela === tela), a0 = g[0];
+    let linea = limpioNombre(m.linea); const cat = limpioNombre(m.categoria);
+    if (!linea) throw new Regla("Escribe la línea, por ejemplo Microfibras.");
+    if (!cat) throw new Regla("Escribe la categoría, por ejemplo Unicolor.");
+    const existente = D.articulos.find(a => a.tela !== tela && lineaDe(a).toLowerCase() === linea.toLowerCase());
+    if (existente) linea = lineaDe(existente);
+    const nueva = nombreTela(linea, cat);
+    if (D.articulos.some(a => a.tela !== tela && a.tela.toLowerCase() === nueva.toLowerCase())) throw new Regla(`${linea} › ${cat} ya existe. Elige otro nombre.`);
+    const tope = m.tope.trim() ? decimal(m.tope) : NaN;
+    if (!(tope > 0)) throw new Regla("El tope por rollo debe ser un número mayor que cero, con hasta 2 decimales.");
+    const ancho = m.ancho.trim() ? decimal(m.ancho) : null;
+    if (m.ancho.trim() && !(ancho > 0)) throw new Regla("El ancho es un número en centímetros, por ejemplo 150.");
+    if (m.un !== a0.un && g.some(a => a.usada)) throw new Regla("Esta categoría ya tiene rollos recibidos: su unidad no se puede cambiar.");
+    const cambios = [];
+    if (lineaDe(a0) !== linea) cambios.push(`Línea: ${lineaDe(a0)} → ${linea}`);
+    if ((a0.categoria || "") !== cat) cambios.push(`Categoría: ${a0.categoria || "(sin categoría)"} → ${cat}`);
+    if (a0.un !== m.un) cambios.push(`Unidad: ${UN[a0.un].nombre} → ${UN[m.un].nombre}`);
+    if ((a0.ancho || null) !== ancho) cambios.push(`Ancho: ${a0.ancho || "—"} → ${ancho || "—"}`);
+    if ((a0.comp || "") !== m.comp.trim()) cambios.push(`Composición: ${a0.comp || "—"} → ${m.comp.trim() || "—"}`);
+    if (a0.tope !== tope) cambios.push(`Tope: ${a0.tope} → ${tope}`);
+    if (m.por !== (a0.por || "color")) cambios.push(`Cada artículo es un: ${POR[a0.por || "color"][0]} → ${POR[m.por][0]}`);
+    if (!cambios.length) throw new Regla("No cambiaste nada.");
+    g.forEach(a => { cambios.forEach(c => anotar(a, c)); Object.assign(a, { linea, categoria: cat, tela: nueva, un: m.un, ancho, comp: m.comp.trim(), tope, por: m.por }) });
+    UI.abiertos[`linea-${D.articulos.find(a => lineaDe(a) === linea).id}`] = true; guardarUI();
+    return `${linea} › ${cat} actualizada. Los códigos y abreviaturas no cambian; las etiquetas ya impresas conservan el nombre anterior.`;
+  },
+  variante(a, nombre) {
+    exigir("catalogo.editar");
+    nombre = limpioNombre(nombre);
+    const V = POR[a.por || "color"][0].toLowerCase();
+    if (!nombre) throw new Regla(`Escribe el ${V}.`);
+    if (nombre === a.color) throw new Regla("El nombre no cambió.");
+    if (D.articulos.some(x => x.id !== a.id && x.tela === a.tela && x.color.toLowerCase() === nombre.toLowerCase())) throw new Regla(`${nombre} ya existe en esta categoría.`);
+    anotar(a, `${POR[a.por || "color"][0]}: ${a.color} → ${nombre}`); a.color = nombre;
+    return `${a.codigo} ahora es ${nombre}. Su código y su abreviatura no cambian.`;
+  },
+};
+function modalEdicion(m, caja) {
+  if (m.tipo === "ed-linea") return caja(`Editar línea`, esc(m.viejo), `
+      <div class="field"><label for="em-linea">Nombre de la línea</label><input id="em-linea" data-em="linea" value="${esc(m.linea)}" autocomplete="off"></div>
+      <p class="note" style="margin:0">Cambia el nombre en todas sus categorías y artículos. Si escribes una línea que ya existe, sus categorías se pasan a esa línea. Los códigos y abreviaturas no cambian.</p>
+      <div class="acts-row"><button class="btn primary" data-act="em-ok">Guardar</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 520);
+  if (m.tipo === "ed-cat") {
+    const usada = D.articulos.some(a => a.tela === m.tela && a.usada), lineas = [...new Set(D.articulos.map(lineaDe))].sort();
+    return caja(`Editar categoría`, esc(m.tela), `
+      <div class="row2">
+        <div class="field"><label for="em-linea">Línea</label><input id="em-linea" data-em="linea" list="em-lineas" value="${esc(m.linea)}" autocomplete="off">
+          <datalist id="em-lineas">${lineas.map(x => `<option value="${esc(x)}">`).join("")}</datalist><span class="hint">Puedes pasarla a otra línea.</span></div>
+        <div class="field"><label for="em-cat">Categoría</label><input id="em-cat" data-em="categoria" value="${esc(m.categoria)}" placeholder="Ej. Unicolor" autocomplete="off"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><span class="lbl" id="em-lbl-por">Cada artículo es un</span><div class="seg" role="group" aria-labelledby="em-lbl-por">${Object.keys(POR).map(k => `<button type="button" data-act="em-set" data-k="por" data-v="${k}" aria-pressed="${m.por === k}">${POR[k][0]}</button>`).join("")}</div></div>
+        <div class="field"><span class="lbl" id="em-lbl-un">Se controla por</span><div class="seg" role="group" aria-labelledby="em-lbl-un">${["kg", "m"].map(k => `<button type="button" data-act="em-set" data-k="un" data-v="${k}" aria-pressed="${m.un === k}" ${usada ? "disabled" : ""}>${UN[k].nombre}</button>`).join("")}</div>
+          ${usada ? `<span class="hint">Fija: ya hay rollos recibidos.</span>` : ""}</div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="em-ancho">Ancho en cm</label><input id="em-ancho" data-em="ancho" inputmode="decimal" value="${esc(m.ancho)}" placeholder="Opcional"></div>
+        <div class="field"><label for="em-comp">Composición</label><input id="em-comp" data-em="comp" value="${esc(m.comp)}" placeholder="Opcional"></div>
+        <div class="field"><label for="em-tope">Tope por rollo (${UN[m.un].corto})</label><input id="em-tope" data-em="tope" inputmode="decimal" value="${esc(m.tope)}"></div>
+      </div>
+      <p class="note" style="margin:0">Los códigos y abreviaturas de sus artículos no cambian. El cambio queda anotado en cada artículo.</p>
+      <div class="acts-row"><button class="btn primary" data-act="em-ok">Guardar cambios</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 720);
+  }
+  if (m.tipo === "ed-var") { const a = art(m.id), V = POR[a.por || "color"][0];
+    return caja(`Editar ${V.toLowerCase()}`, `${esc(a.codigo)} · ${esc(lineaDe(a))}${a.categoria ? ` › ${esc(a.categoria)}` : ""}`, `
+      <div class="field"><label for="em-var">${V}</label><input id="em-var" data-em="color" value="${esc(m.color)}" autocomplete="off"></div>
+      <p class="note" style="margin:0">El código ${esc(a.codigo)} y la abreviatura ${esc(a.abr)} no cambian.</p>
+      <div class="acts-row"><button class="btn primary" data-act="em-ok">Guardar</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 480) }
+  return "";
+}
+
 function vistaArticulos() {
   const editar = puede("catalogo.editar"), lineas = {};
   D.articulos.forEach(a => ((lineas[lineaDe(a)] ||= {})[a.tela] ||= []).push(a));
@@ -419,13 +510,13 @@ function vistaArticulos() {
   ${D.articulos.length ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
   ${Object.keys(lineas).sort(orden).map(l => { const cats = lineas[l], todos = Object.values(cats).flat(), kl = `linea-${todos[0].id}`; return `
   <section class="card">
-    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} artículos · ${rollos(disp(todos))}`)}
-      <div class="counts">${editar && !S.artForm ? `<button class="btn small" data-act="art-cat" data-id="${todos[0].id}">Nueva categoría</button>` : ""}</div></div>
+    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} ${todos.length === 1 ? "artículo" : "artículos"} · ${rollos(disp(todos))}`)}
+      <div class="counts">${editar && !S.artForm ? `<button class="btn small" data-act="ed-linea" data-id="${todos[0].id}">Editar</button><button class="btn small" data-act="art-cat" data-id="${todos[0].id}">Nueva categoría</button>` : ""}</div></div>
     ${abierto(kl) ? `<div class="racks">${Object.keys(cats).sort(orden).map(t => { const g = cats[t], a0 = g[0], k = `tela-${a0.id}`, V = POR[a0.por || "color"], activos = g.filter(a => a.activo).length;
       const resumen = [`${g.length} ${g.length === 1 ? V[0].toLowerCase() : V[1]}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, a0.ancho ? `${String(a0.ancho).replace(".", ",")} cm` : "", a0.comp ? esc(a0.comp) : "", rollos(disp(g))].filter(Boolean).join(" · ");
       return `<div class="rack">
-      <div class="form-foot">${plegable(k, esc(a0.categoria || t), resumen, true)}
-        ${editar && !S.artForm ? `<button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar ${V[1]}</button>` : ""}</div>
+      <div class="form-foot">${plegable(k, esc(a0.categoria || t), a0.categoria ? resumen : `${resumen} · sin categoría: usa Editar`, true)}
+        ${editar && !S.artForm ? `<div class="acts-row"><button class="btn small" data-act="ed-cat" data-id="${a0.id}">Editar</button><button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar ${V[1]}</button></div>` : ""}</div>
       ${abierto(k) ? `<div class="tablewrap"><table>
         <thead><tr><th>${V[0]}</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
         <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
@@ -433,7 +524,7 @@ function vistaArticulos() {
           <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
           <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
           <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
-          <td>${editar ? `<button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}
+          <td>${editar ? `<div class="acts-row" style="flex-wrap:nowrap"><button class="btn small" data-act="ed-var" data-id="${a.id}">Editar</button><button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button></div>` : ""}</td></tr>`).join("")}
         </tbody></table></div>` : ""}</div>` }).join("")}</div>` : ""}
   </section>` }).join("")}`;
 }
@@ -1305,6 +1396,7 @@ function modal() {
       <div class="lote">${pend.map(etiqueta).join("")}</div>
       <div class="acts-row"><button class="btn primary" data-act="lote-ok">Imprimir ${pend.length} ${pend.length === 1 ? "etiqueta" : "etiquetas"}</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 1000);
   }
+  if (m.tipo.startsWith("ed-")) return modalEdicion(m, caja);
   if (m.tipo === "ubi-lote") {
     const xs = m.codigos.map(ubiPorCodigo).filter(Boolean);
     return caja(`${xs.length} ${xs.length === 1 ? "etiqueta" : "etiquetas"} de ubicación`, `${esc(m.titulo)} · etiqueta térmica 100 × 150 mm`, `
@@ -1382,6 +1474,12 @@ document.addEventListener("click", e => {
       Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } });
       Object.assign(S, { artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
     case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-linea")?.focus(); return;
+    case "ed-linea": { const a = art(el.dataset.id); S.modal = { tipo: "ed-linea", viejo: lineaDe(a), linea: lineaDe(a) }; render(); return document.getElementById("em-linea")?.select() }
+    case "ed-cat": { const a = art(el.dataset.id); S.modal = { tipo: "ed-cat", tela: a.tela, linea: lineaDe(a), categoria: a.categoria || "", por: a.por || "color", un: a.un,
+        ancho: a.ancho ? String(a.ancho).replace(".", ",") : "", comp: a.comp || "", tope: String(a.tope).replace(".", ",") }; render(); return document.getElementById(a.categoria ? "em-cat" : "em-linea")?.select() }
+    case "ed-var": { const a = art(el.dataset.id); S.modal = { tipo: "ed-var", id: a.id, color: a.color }; render(); return document.getElementById("em-var")?.select() }
+    case "em-set": S.modal[el.dataset.k] = el.dataset.v; return render();
+    case "em-ok": { const m = S.modal; return hacer(() => { const msg = m.tipo === "ed-linea" ? ACC_EDIT.linea(m.viejo, m.linea) : m.tipo === "ed-cat" ? ACC_EDIT.categoria(m.tela, m) : ACC_EDIT.variante(art(m.id), m.color); S.modal = null; return msg }) }
     case "art-cat": abrirFormArticulo(el.dataset.id, true); render(); document.getElementById("af-cat")?.focus(); return;
     case "af-por": S.artForm.por = el.dataset.por; return render();
     case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
@@ -1436,6 +1534,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && S.modal) { S.modal = null; render() }
+  if (e.key === "Enter" && e.target.dataset?.em !== undefined) { e.preventDefault(); document.querySelector('[data-act="em-ok"]')?.click() }
   if (e.key === "Enter" && e.target.matches("tr.click")) e.target.click();
 });
 document.addEventListener("input", e => {
@@ -1449,6 +1548,7 @@ document.addEventListener("input", e => {
     return refrescarSugerencias();
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
+  if (ds.em) { S.modal[ds.em] = t.value; return }
   if (ds.uf) { S.ubiForm[ds.uf] = t.value; const pv = document.getElementById("uf-prev"); if (pv) pv.textContent = previaRack(S.ubiForm); return }
   if (t.id === "u-anaquel") { S.ubi.anaquel = t.value; return }
   if (t.id === "u-rollo") { S.ubi.rollo = t.value; return }
