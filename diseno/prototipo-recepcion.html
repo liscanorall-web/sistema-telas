@@ -219,12 +219,12 @@ tr.off td { color: var(--muted) }
 <script>
 "use strict";
 // ---------------------------------------------------------------- Personas y permisos de ejemplo
-const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "etiqueta.imprimir"];
+const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "compra.crear", "etiqueta.imprimir"];
 const USERS = {
   admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
   ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir"] },
   carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir"] },
-  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
+  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "compra.crear", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
 };
 const UN = {
   kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
@@ -257,14 +257,14 @@ const EVENTO = {
 
 // ---------------------------------------------------------------- Estado (solo en este navegador)
 const CLAVE = "telas-prototipo-v2";
-const D = { articulos: [], proveedores: [], ubicaciones: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0 } };
+const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } };
 const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
-            artForm: null, provForm: null, ubiForm: null, recForm: null,
+            artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null,
             form: { art: "", peso: "", fab: "" }, ubi: { anaquel: "", rollo: "" }, motivo: "", sel: {} };
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
 function cargar() {
   try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
-  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
+  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
   // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
   D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
 }
@@ -522,7 +522,110 @@ function vistaUbicaciones() {
   ${grupo("anaquel")}`;
 }
 
-// ---------------------------------------------------------------- Módulo 4 · Recepciones
+// ---------------------------------------------------------------- Módulo 4 · Órdenes de compra
+const EST_OC = { abierta: ["Por llegar", "s-info"], parcial: ["Recibida en parte", "s-warn"], completa: ["Recibida completa", "s-ok"], anulada: ["Anulada", "s-off"] };
+function ocById(id) { return D.ocs.find(o => o.id === id) }
+function r2(n) { return Math.round(n * 100) / 100 }
+// Avance de una orden: lo recibido sale de los rollos vivos de sus recepciones no rechazadas.
+function avanceOC(o) {
+  const recs = D.recs.filter(r => r.oc === o.id && r.estado !== "rechazada"), ids = new Set(recs.map(r => r.id));
+  const lineas = o.lineas.map(l => {
+    const a = art(l.art), vivas = D.piezas.filter(p => ids.has(p.rec) && p.art === l.art && !["anulada", "rechazada"].includes(p.estado));
+    const recibido = r2(vivas.reduce((s, p) => s + p.cantidad, 0));
+    return { ...l, a, un: a.un, recibido, rollosRec: vivas.length, pendiente: Math.max(0, r2(l.pedido - recibido)) };
+  });
+  const estado = o.anulada ? "anulada" : lineas.every(l => l.pendiente === 0) ? "completa" : recs.length ? "parcial" : "abierta";
+  return { lineas, recs, estado };
+}
+function ocsAbiertas() { return D.ocs.filter(o => ["abierta", "parcial"].includes(avanceOC(o).estado)) }
+function abrirFormOC() { S.ocForm = { prov: D.proveedores.find(p => p.activo)?.id || "", ref: "", llegada: "", lineas: [{ art: "", cant: "", rollos: "" }] } }
+const ACC_OC = {
+  guardar() {
+    exigir("compra.crear");
+    const f = S.ocForm;
+    if (!prov(f.prov)) throw new Regla("Elige el proveedor.");
+    if (f.llegada && !/^\d{4}-\d{2}-\d{2}$/.test(f.llegada)) throw new Regla("La fecha estimada de llegada no es válida.");
+    const lineas = f.lineas.filter(l => l.art || l.cant.trim() || l.rollos.trim());
+    if (!lineas.length) throw new Regla("Agrega al menos un artículo pedido.");
+    const vistos = new Set();
+    const ok = lineas.map((l, i) => {
+      const a = art(l.art);
+      if (!a) throw new Regla(`Línea ${i + 1}: elige el artículo. Si no existe, créalo antes en Artículos.`);
+      if (vistos.has(a.id)) throw new Regla(`${a.codigo} está repetido. Pon cada artículo una sola vez con su total.`);
+      vistos.add(a.id);
+      const c = decimal(l.cant);
+      if (!(c > 0)) throw new Regla(`Línea ${i + 1}: escribe la cantidad pedida en ${UN[a.un].corto}, con hasta 2 decimales.`);
+      const ro = l.rollos.trim() ? Number(l.rollos) : null;
+      if (l.rollos.trim() && !(Number.isInteger(ro) && ro > 0)) throw new Regla(`Línea ${i + 1}: los rollos pedidos son un número entero.`);
+      return { art: a.id, pedido: c, rollos: ro };
+    });
+    const o = { id: "o" + (++D.sec.oc), numero: `OC-${String(D.sec.oc).padStart(6, "0")}`, prov: f.prov, ref: f.ref.trim(), llegada: f.llegada,
+                fecha: hoyISO(), por: S.user, hora: hoy(), lineas: ok, anulada: false };
+    D.ocs.push(o); S.ocForm = null;
+    return `Orden ${o.numero} registrada. Cuando llegue el contenedor, la recepción se abre desde esta orden.`;
+  },
+  anular(o) {
+    exigir("compra.crear");
+    if (avanceOC(o).recs.length) throw new Regla(`La orden ${o.numero} ya tiene recepciones: no se anula.`);
+    o.anulada = true; o.anuladaPor = S.user; o.anuladaHora = hoy();
+    return `Orden ${o.numero} anulada. Su número no se reutiliza.`;
+  },
+};
+function vistaCompras() {
+  const editar = puede("compra.crear"), f = S.ocForm, faltan = [];
+  if (!D.articulos.some(a => a.activo)) faltan.push(`<button class="link" data-act="ir" data-v="articulos">crear los artículos</button>`);
+  if (!D.proveedores.length) faltan.push(`<button class="link" data-act="ir" data-v="proveedores">crear el proveedor</button>`);
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 4 · Compras</div><h1>Órdenes de compra</h1><p>Lo que le pediste al proveedor, registrado antes de que llegue el contenedor. Cuando llega, la recepción se carga desde aquí y se cuadra contra lo pedido.</p></div>
+    <div class="counts">${editar && !f && !faltan.length ? `<button class="btn primary" data-act="oc-nueva">Nueva orden de compra</button>` : !editar ? `<span class="note">Las órdenes las registra el gerente general.</span>` : ""}</div>
+  </section>
+  ${faltan.length ? `<p class="banner info">Antes de registrar una compra hay que ${faltan.join(" y ")}. La orden solo admite códigos que ya existen.</p>` : ""}
+  ${f ? `<section class="card"><h2>Nueva orden de compra</h2><p class="sub">Qué pediste, a quién y cuánto. Solo admite artículos del catálogo, en su unidad.</p>
+    <form class="form" id="oc-form">
+      <div class="row2">
+        <div class="field"><label for="of-prov">Proveedor</label><select id="of-prov" data-of="prov">${D.proveedores.map(p => `<option value="${p.id}" ${p.id === f.prov ? "selected" : ""}>${esc(p.nombre)}</option>`).join("")}</select></div>
+        <div class="field"><label for="of-ref">Referencia del proveedor (opcional)</label><input id="of-ref" data-of="ref" value="${esc(f.ref)}" placeholder="Ej. Proforma PI-2026-118" autocomplete="off"></div>
+        <div class="field"><label for="of-llegada">Llegada estimada (opcional)</label><input id="of-llegada" type="date" data-of="llegada" value="${f.llegada}"></div>
+      </div>
+      <div class="tablewrap"><table class="colores">
+        <thead><tr><th>Artículo pedido</th><th>Cantidad pedida</th><th>Rollos pedidos</th><th></th></tr></thead>
+        <tbody>${f.lineas.map((l, i) => { const a = art(l.art); return `<tr>
+          <td style="min-width:240px"><select data-ol="${i}" data-col="art" aria-label="Artículo, línea ${i + 1}">${opcionesArticulo(l.art)}</select></td>
+          <td style="min-width:150px"><div style="display:flex;gap:6px;align-items:center"><input data-ol="${i}" data-col="cant" inputmode="decimal" value="${esc(l.cant)}" placeholder="${a ? (a.un === "kg" ? "Ej. 1000,00" : "Ej. 3000,00") : ""}" aria-label="Cantidad, línea ${i + 1}"><span class="note" style="width:22px">${a ? UN[a.un].corto : ""}</span></div></td>
+          <td style="min-width:110px"><input data-ol="${i}" data-col="rollos" inputmode="numeric" value="${esc(l.rollos)}" placeholder="Opcional" aria-label="Rollos, línea ${i + 1}"></td>
+          <td>${f.lineas.length > 1 ? `<button type="button" class="btn small" data-act="of-quitar" data-row="${i}">Quitar</button>` : ""}</td></tr>` }).join("")}
+        </tbody></table></div>
+      <div class="form-foot"><button type="button" class="btn" data-act="of-linea">Agregar otro artículo</button>
+        <div class="acts-row"><button type="button" class="btn" data-act="of-cancelar">Cancelar</button><button type="submit" class="btn primary">Registrar orden</button></div></div>
+    </form></section>` : ""}
+  ${!D.ocs.length && !f ? `<section class="card empty"><h2>Todavía no hay órdenes de compra</h2><p>Registra lo que le compraste al proveedor. Así, cuando llegue el contenedor, el gerente de recepción no escribe todo de nuevo.</p>
+      ${editar && !faltan.length ? `<button class="btn primary" data-act="oc-nueva">Registrar la primera orden</button>` : ""}</section>` : ""}
+  ${[...D.ocs].reverse().map(o => { const av = avanceOC(o); return `
+  <section class="card">
+    <div class="grupo-head"><h2>${o.numero}</h2>
+      <div class="counts"><span class="pill ${EST_OC[av.estado][1]}">${EST_OC[av.estado][0]}</span>
+        ${editar && !av.recs.length && !o.anulada ? `<button class="btn small danger" data-act="oc-anular" data-id="${o.id}">Anular</button>` : ""}</div></div>
+    <dl class="facts" style="margin-bottom:12px">
+      <div><dt>Proveedor</dt><dd>${esc(prov(o.prov)?.nombre)}</dd></div>
+      <div><dt>Referencia</dt><dd>${esc(o.ref) || "—"}</dd></div>
+      <div><dt>Registrada</dt><dd>${o.hora} · ${quien(o.por)}</dd></div>
+      <div><dt>Llegada estimada</dt><dd>${o.llegada ? dmy(o.llegada) : "—"}</dd></div>
+      <div><dt>Recepciones</dt><dd>${av.recs.length ? av.recs.map(r => `<button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button>`).join(", ") : "Ninguna todavía"}</dd></div>
+    </dl>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Artículo</th><th class="num">Pedido</th><th class="num">Recibido</th><th class="num">Pendiente</th><th>Avance</th></tr></thead>
+      <tbody>${av.lineas.map(l => `<tr><td class="art"><span class="mono">${esc(l.a.codigo)}</span> · ${esc(nombreArt(l.a))}</td>
+        <td class="num">${cant(l.pedido, l.un)}${l.rollos ? `<br><span class="note">${l.rollos} rollos</span>` : ""}</td>
+        <td class="num">${cant(l.recibido, l.un)}<br><span class="note">${l.rollosRec} rollos</span></td>
+        <td class="num ${l.pendiente ? "pos" : "zero"}">${cant(l.pendiente, l.un)}</td>
+        <td style="min-width:120px"><div class="bar"><i class="${l.pendiente === 0 ? "full" : ""}" style="width:${Math.min(100, l.recibido * 100 / l.pedido)}%"></i></div></td></tr>`).join("")}
+      </tbody></table></div>
+    ${o.anulada ? `<p class="banner bad" style="margin-top:12px">Anulada por ${quien(o.anuladaPor)} el ${o.anuladaHora}.</p>` : ""}
+  </section>` }).join("")}`;
+}
+
+// ---------------------------------------------------------------- Módulo 5 · Recepciones
 function siguienteCodigo(fecha, abr, consumir) {
   const k = ymd(fecha) + abr, n = (D.contador[k] || 0) + 1;
   if (consumir) D.contador[k] = n;
@@ -548,13 +651,23 @@ function cuadre(r) {
 }
 
 function abrirFormRecepcion() {
-  S.recForm = { prov: D.proveedores[0]?.id || "", docTipo: "Factura", docNum: "", fecha: hoyISO(), muelle: ubisActivas("muelle")[0]?.codigo || "", contenedor: "", lineas: [{ art: "", cant: "", rollos: "" }] };
+  const abiertas = ocsAbiertas();
+  S.recForm = { oc: "", prov: "", docTipo: "Factura", docNum: "", fecha: hoyISO(), muelle: ubisActivas("muelle")[0]?.codigo || "", contenedor: "", lineas: [] };
+  if (abiertas.length === 1) cargarOC(abiertas[0].id);
+}
+// Al elegir la orden se copian sus artículos con lo pendiente; el gerente de recepción corrige según la factura del contenedor.
+function cargarOC(id) {
+  const f = S.recForm, o = ocById(id);
+  f.oc = o ? o.id : ""; f.prov = o ? o.prov : "";
+  f.lineas = o ? avanceOC(o).lineas.filter(l => l.pendiente > 0).map(l => ({ art: l.art, cant: n2(l.pendiente).replace(/\./g, ""), rollos: l.rollos && !l.rollosRec ? String(l.rollos) : "" })) : [];
 }
 const ACC = {
   crearRecepcion() {
     exigir("recepcion.crear");
     const f = S.recForm;
-    if (!prov(f.prov)) throw new Regla("Elige el proveedor.");
+    const o = ocById(f.oc);
+    if (!o) throw new Regla("Elige la orden de compra de esta mercancía.");
+    if (!["abierta", "parcial"].includes(avanceOC(o).estado)) throw new Regla(`La orden ${o.numero} ya no admite recepciones.`);
     if (f.contenedor.trim() && !/^[A-Za-z0-9 -]{4,20}$/.test(f.contenedor.trim())) throw new Regla("El número de contenedor lleva letras y números, por ejemplo MSCU 123456-7.");
     if (!f.docNum.trim()) throw new Regla("Escribe el número del documento del proveedor.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.fecha)) throw new Regla("Indica la fecha de recepción.");
@@ -566,14 +679,15 @@ const ACC = {
       const a = art(l.art);
       if (!a) throw new Regla(`Línea ${i + 1}: elige el artículo.`);
       if (vistos.has(a.id)) throw new Regla(`${a.codigo} está repetido. Pon cada artículo una sola vez con su total.`);
+      if (!o.lineas.some(x => x.art === a.id)) throw new Regla(`${a.codigo} no está en la orden ${o.numero}. Solo se recibe lo que se pidió.`);
       vistos.add(a.id);
       const c = decimal(l.cant);
       if (!(c > 0)) throw new Regla(`Línea ${i + 1}: escribe la cantidad facturada en ${UN[a.un].corto}, con hasta 2 decimales.`);
       const ro = l.rollos.trim() ? Number(l.rollos) : null;
       if (l.rollos.trim() && !(Number.isInteger(ro) && ro > 0)) throw new Regla(`Línea ${i + 1}: los rollos facturados son un número entero.`);
-      return { art: a.id, esperado: c, rollos: ro };
+      return { art: a.id, esperado: c, rollos: ro, pedido: avanceOC(o).lineas.find(x => x.art === a.id).pendiente };
     });
-    const r = { id: "r" + (++D.sec.rec), numero: `REC-${String(D.sec.rec).padStart(6, "0")}`, prov: f.prov, doc: `${f.docTipo} ${f.docNum.trim()}`,
+    const r = { id: "r" + (++D.sec.rec), numero: `REC-${String(D.sec.rec).padStart(6, "0")}`, oc: o.id, prov: o.prov, doc: `${f.docTipo} ${f.docNum.trim()}`,
                 fecha: f.fecha, muelle: f.muelle, contenedor: f.contenedor.trim().toUpperCase(), estado: "en_preparacion", responsable: S.user, verificadoPor: null, lineas: ok, incidencias: [], decision: null, t: {} };
     marcar(r, "inicio");
     D.recs.push(r);
@@ -715,11 +829,12 @@ function vistaRecepciones() {
   const faltan = [];
   if (!D.articulos.some(a => a.activo)) faltan.push(`<button class="link" data-act="ir" data-v="articulos">crear artículos</button>`);
   if (!D.proveedores.length) faltan.push(`<button class="link" data-act="ir" data-v="proveedores">crear un proveedor</button>`);
+  if (!ocsAbiertas().length) faltan.push(`<button class="link" data-act="ir" data-v="compras">registrar la orden de compra</button>`);
   if (!ubisActivas("muelle").length) faltan.push(`<button class="link" data-act="ir" data-v="ubicaciones">crear un muelle de recepción</button>`);
   const cuenta = k => D.recs.filter(r => r.estado === k).length;
   return `
   <section class="page-head">
-    <div><div class="eyebrow">Paso 4 · Recepción inicial</div><h1>Recepciones</h1><p>Cada recepción parte del documento del proveedor y solo admite artículos del catálogo.</p></div>
+    <div><div class="eyebrow">Paso 5 · Recepción inicial</div><h1>Recepciones</h1><p>Cada recepción parte de una orden de compra y de la factura del contenedor. Solo admite lo que se pidió.</p></div>
     <div class="counts">
       ${D.recs.length ? `<span class="pill s-info">En registro: ${cuenta("en_preparacion") + cuenta("pendiente_verificacion")}</span>
       <span class="pill s-warn">Esperando al gerente: ${cuenta("pendiente_autorizacion")}</span>
@@ -735,23 +850,24 @@ function vistaRecepciones() {
       <thead><tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Documento</th><th class="num">Rollos</th><th class="num">Facturado</th><th class="num">Recibido</th><th>Estado</th><th>Siguiente paso</th><th class="num">Tiempo</th></tr></thead>
       <tbody>${[...D.recs].reverse().map(r => { const c = cuadre(r); return `
         <tr class="click" data-act="abrir" data-id="${r.id}" tabindex="0">
-          <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}${r.contenedor ? `<br><span class="note mono">${esc(r.contenedor)}</span>` : ""}</td>
+          <td class="mono">${r.numero}</td><td>${dmy(r.fecha)}</td><td>${esc(prov(r.prov)?.nombre)}</td><td>${esc(r.doc)}${r.oc ? `<br><span class="note mono">${ocById(r.oc)?.numero}</span>` : ""}${r.contenedor ? `<br><span class="note mono">${esc(r.contenedor)}</span>` : ""}</td>
           <td class="num">${c.registradas}${c.rollos ? ` / ${c.rollos}` : ""}</td><td class="num">${porUnidad(c.lineas, l => l.esperado)}</td><td class="num">${porUnidad(c.lineas, l => l.recibido)}</td>
           <td>${pillRec(r.estado)}</td><td class="note">${EST_REC[r.estado][2]}</td><td class="num">${tiempoTotal(r)}</td></tr>` }).join("")}
       </tbody></table></div></section>` : ""}`;
 }
 
-function opcionesArticulo(sel) {
-  const g = {}; D.articulos.filter(a => a.activo || a.id === sel).forEach(a => (g[a.tela] ||= []).push(a));
+function opcionesArticulo(sel, solo) {
+  const g = {}; D.articulos.filter(a => (a.activo || a.id === sel) && (!solo || solo.includes(a.id))).forEach(a => (g[a.tela] ||= []).push(a));
   return `<option value="">Elige el artículo</option>` + Object.keys(g).sort().map(t => `<optgroup label="${esc(t)} · por ${UN[g[t][0].un].nombre.toLowerCase()}">${g[t].map(a =>
     `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(a.codigo)} · ${esc(a.color)} (${UN[a.un].corto})</option>`).join("")}</optgroup>`).join("");
 }
 function formRecepcion() {
   const f = S.recForm;
-  return `<section class="card"><h2>Nueva recepción · datos del contenedor</h2><p class="sub">El gerente de recepción vacía aquí la información del contenedor a descargar, tal como viene en el documento del proveedor. Contra esto se cuadra lo que se reciba en el muelle.</p>
+  return `<section class="card"><h2>Nueva recepción · datos del contenedor</h2><p class="sub">El gerente de recepción elige la orden de compra y vacía la información del contenedor a descargar, tal como viene en la factura del proveedor. Contra esto se cuadra lo que se reciba en el muelle.</p>
     <form class="form" id="rec-form">
       <div class="row2">
-        <div class="field"><label for="rf-prov">Proveedor</label><select id="rf-prov" data-rf="prov">${D.proveedores.map(p => `<option value="${p.id}" ${p.id === f.prov ? "selected" : ""}>${esc(p.nombre)}</option>`).join("")}</select></div>
+        <div class="field"><label for="rf-oc">Orden de compra</label><select id="rf-oc"><option value="">Elige la orden</option>${ocsAbiertas().map(o => `<option value="${o.id}" ${o.id === f.oc ? "selected" : ""}>${o.numero} · ${esc(prov(o.prov)?.nombre)}${o.ref ? ` · ${esc(o.ref)}` : ""}</option>`).join("")}</select><span class="hint">Trae el proveedor y lo pendiente del pedido.</span></div>
+        <div class="field"><span class="lbl">Proveedor</span><div style="padding:9px 0;font-weight:500">${f.oc ? esc(prov(f.prov)?.nombre) : `<span class="note">Sale de la orden</span>`}</div></div>
         <div class="field"><label for="rf-tipo">Documento</label><select id="rf-tipo" data-rf="docTipo">${DOCS.map(d => `<option ${d === f.docTipo ? "selected" : ""}>${d}</option>`).join("")}</select></div>
         <div class="field"><label for="rf-num">Número del documento</label><input id="rf-num" data-rf="docNum" value="${esc(f.docNum)}" placeholder="Ej. F-002315" autocomplete="off"></div>
         <div class="field"><label for="rf-cont">Contenedor (opcional)</label><input id="rf-cont" class="mono" data-rf="contenedor" value="${esc(f.contenedor)}" placeholder="Ej. MSCU 123456-7" autocomplete="off" style="text-transform:uppercase"><span class="hint">Déjalo vacío si la mercancía no llega en contenedor.</span></div>
@@ -759,14 +875,16 @@ function formRecepcion() {
         <div class="field"><label for="rf-muelle">Muelle de recepción</label><select id="rf-muelle" data-rf="muelle">${ubisActivas("muelle").map(x => `<option value="${esc(x.codigo)}" ${x.codigo === f.muelle ? "selected" : ""}>${esc(x.codigo)}${x.desc ? ` · ${esc(x.desc)}` : ""}</option>`).join("")}</select><span class="hint">Donde se descarga y se registra el contenedor.</span></div>
       </div>
       <div class="tablewrap"><table class="colores">
-        <thead><tr><th>Artículo facturado</th><th>Cantidad facturada</th><th>Rollos facturados</th><th></th></tr></thead>
-        <tbody>${f.lineas.map((l, i) => { const a = art(l.art); return `<tr>
-          <td style="min-width:240px"><select data-rl="${i}" data-col="art" aria-label="Artículo, línea ${i + 1}">${opcionesArticulo(l.art)}</select></td>
+        <thead><tr><th>Artículo facturado</th><th class="num">Pendiente en la orden</th><th>Cantidad facturada</th><th>Rollos facturados</th><th></th></tr></thead>
+        <tbody>${!f.oc ? `<tr><td colspan="5" class="note">Elige la orden de compra y aquí aparecen sus artículos pendientes.</td></tr>` : ""}${f.lineas.map((l, i) => { const a = art(l.art), pend = f.oc && avanceOC(ocById(f.oc)).lineas.find(x => x.art === l.art); return `<tr>
+          <td style="min-width:240px"><select data-rl="${i}" data-col="art" aria-label="Artículo, línea ${i + 1}">${opcionesArticulo(l.art, ocById(f.oc)?.lineas.map(x => x.art))}</select></td>
+          <td class="num">${pend ? cant(pend.pendiente, pend.un) : ""}</td>
           <td style="min-width:150px"><div style="display:flex;gap:6px;align-items:center"><input data-rl="${i}" data-col="cant" inputmode="decimal" value="${esc(l.cant)}" placeholder="${a ? (a.un === "kg" ? "Ej. 250,00" : "Ej. 600,00") : ""}" aria-label="Cantidad, línea ${i + 1}"><span class="note" style="width:22px">${a ? UN[a.un].corto : ""}</span></div></td>
           <td style="min-width:110px"><input data-rl="${i}" data-col="rollos" inputmode="numeric" value="${esc(l.rollos)}" placeholder="Ej. 10" aria-label="Rollos, línea ${i + 1}"></td>
           <td>${f.lineas.length > 1 ? `<button type="button" class="btn small" data-act="rf-quitar" data-row="${i}">Quitar</button>` : ""}</td></tr>` }).join("")}
         </tbody></table></div>
-      <div class="form-foot"><button type="button" class="btn" data-act="rf-linea">Agregar otro artículo</button>
+      ${f.oc ? `<p class="note" style="margin:0">Corrige las cantidades según la factura del contenedor. Si un artículo de la orden no vino, quítalo: queda pendiente para otro contenedor.</p>` : ""}
+      <div class="form-foot">${f.oc ? `<button type="button" class="btn" data-act="rf-linea">Agregar otro artículo de la orden</button>` : "<span></span>"}
         <div class="acts-row"><button type="button" class="btn" data-act="rf-cancelar">Cancelar</button><button type="submit" class="btn primary">Abrir recepción</button></div></div>
     </form></section>`;
 }
@@ -802,11 +920,12 @@ function tablaCuadre(r) {
   const c = cuadre(r);
   return `<div class="card">
     <h2>Cuadre de recepción</h2>
-    <p class="sub">Lo facturado frente a lo recibido, por artículo y en su unidad. Sin tolerancia: cualquier diferencia se muestra y la decide el gerente.</p>
+    <p class="sub">Lo pedido, lo facturado y lo recibido, por artículo y en su unidad. Sin tolerancia: cualquier diferencia se muestra y la decide el gerente.</p>
     <div class="tablewrap"><table>
-      <thead><tr><th>Artículo</th><th class="num">Facturado</th><th class="num">Recibido</th><th class="num">Diferencia</th><th class="num">%</th><th>Rollos</th></tr></thead>
+      <thead><tr><th>Artículo</th>${r.oc ? `<th class="num">Pedido pendiente</th>` : ""}<th class="num">Facturado</th><th class="num">Recibido</th><th class="num">Diferencia</th><th class="num">%</th><th>Rollos</th></tr></thead>
       <tbody>${c.lineas.map(l => `<tr>
         <td class="art"><span class="mono">${l.a.abr}</span> · ${esc(nombreArt(l.a))}${l.conIncidencia ? `<br><span class="note">${l.conIncidencia} con incidencia</span>` : ""}${l.anuladas ? `<br><span class="note">${l.anuladas} anulado${l.anuladas > 1 ? "s" : ""}, fuera del total</span>` : ""}</td>
+        ${r.oc ? `<td class="num">${l.pedido != null ? cant(l.pedido, l.un) : "—"}${l.pedido != null && l.pedido !== l.esperado ? `<br><span class="note pos">${l.esperado < l.pedido ? `${cant(r2(l.pedido - l.esperado), l.un)} siguen pendientes` : `${cant(r2(l.esperado - l.pedido), l.un)} más de lo pedido`}</span>` : ""}</td>` : ""}
         <td class="num">${cant(l.esperado, l.un)}</td><td class="num">${cant(l.recibido, l.un)}</td>
         <td class="num ${difCls(l.dif)}">${signo(l.dif)} ${UN[l.un].corto}</td><td class="num ${difCls(l.dif)}">${(l.pct > 0 ? "+" : "") + String(l.pct).replace(".", ",")}</td>
         <td>${l.rollos ? `<div style="display:flex;align-items:center;gap:8px"><span class="num ${l.registradas === l.rollos ? "" : "pos"}">${l.registradas}/${l.rollos}</span>
@@ -896,6 +1015,7 @@ function vistaRecepcion() {
     <dl class="facts">
       <div><dt>Proveedor</dt><dd>${esc(prov(r.prov)?.nombre)}</dd></div>
       <div><dt>Documento</dt><dd>${esc(r.doc)}</dd></div>
+      ${r.oc ? `<div><dt>Orden de compra</dt><dd><button class="link" data-act="ir" data-v="compras">${ocById(r.oc)?.numero}</button></dd></div>` : ""}
       <div><dt>Fecha de recepción</dt><dd>${dmy(r.fecha)}</dd></div>
       <div><dt>Almacén</dt><dd>Almacén Principal</dd></div>
       <div><dt>Muelle</dt><dd>${esc(muelleDe(r))}</dd></div>
@@ -1084,9 +1204,9 @@ function toast(msg, error) {
 }
 function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
 function render() {
-  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["recepciones", "4", "Recepciones", D.recs.length]];
+  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length]];
   $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
-  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, recepciones: vistaRecepciones, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
   $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
   $modal.innerHTML = modal();
 }
@@ -1110,8 +1230,8 @@ document.addEventListener("click", e => {
     case "ejemplo": return hacer(cargarEjemplo);
     case "borrar": S.modal = { tipo: "borrar" }; return render();
     case "borrar-ok": try { localStorage.removeItem(CLAVE) } catch (x) {}
-      Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0 } });
-      Object.assign(S, { artForm: null, provForm: null, ubiForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
+      Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } });
+      Object.assign(S, { artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
     case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-tela")?.focus(); return;
     case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
     case "art-activar": return hacer(() => ACC_ART.activar(art(el.dataset.id)));
@@ -1126,6 +1246,11 @@ document.addEventListener("click", e => {
     case "ubi-cancelar": S.ubiForm = null; return render();
     case "ubi-activar": return hacer(() => ACC_UBI.activar(D.ubicaciones.find(x => x.id === el.dataset.id)));
     case "ubicar-fila": hacer(() => ACC.ubicar(r, el.dataset.cod, S.ubi.anaquel)); return listoParaUbicar();
+    case "oc-nueva": abrirFormOC(); return render();
+    case "of-linea": S.ocForm.lineas.push({ art: "", cant: "", rollos: "" }); return render();
+    case "of-quitar": S.ocForm.lineas.splice(+el.dataset.row, 1); return render();
+    case "of-cancelar": S.ocForm = null; return render();
+    case "oc-anular": return hacer(() => ACC_OC.anular(ocById(el.dataset.id)));
     case "rec-nueva": abrirFormRecepcion(); return render();
     case "rf-linea": S.recForm.lineas.push({ art: "", cant: "", rollos: "" }); return render();
     case "rf-quitar": S.recForm.lineas.splice(+el.dataset.row, 1); return render();
@@ -1168,6 +1293,8 @@ document.addEventListener("input", e => {
   if (t.id === "u-anaquel") { S.ubi.anaquel = t.value; return }
   if (t.id === "u-rollo") { S.ubi.rollo = t.value; return }
   if (ds.rf) { S.recForm[ds.rf] = t.value; return }
+  if (ds.of) { S.ocForm[ds.of] = t.value; return }
+  if (ds.ol !== undefined && ds.col !== "art") { S.ocForm.lineas[+ds.ol][ds.col] = t.value; return }
   if (ds.rl !== undefined && ds.col !== "art") { S.recForm.lineas[+ds.rl][ds.col] = t.value; return }
   if (t.id === "f-peso") S.form.peso = t.value;
   else if (t.id === "f-fab") S.form.fab = t.value;
@@ -1177,6 +1304,9 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const t = e.target, ds = t.dataset;
   if (ds.rl !== undefined && ds.col === "art") { S.recForm.lineas[+ds.rl].art = t.value; return render() }
+  if (ds.ol !== undefined && ds.col === "art") { S.ocForm.lineas[+ds.ol].art = t.value; return render() }
+  if (t.id === "rf-oc") { cargarOC(t.value); return render() }
+  if (ds.of) { S.ocForm[ds.of] = t.value; return }
   if (ds.rf) { S.recForm[ds.rf] = t.value; return }
   if (t.id === "f-art") { S.form.art = t.value; S.form.peso = ""; S.form.fab = ""; render(); return listoParaPesar() }
   if (ds.sel) S.sel[ds.sel] = t.checked;
@@ -1193,6 +1323,7 @@ document.addEventListener("submit", e => {
     if (S.ubi.anaquel.trim() && !S.ubi.rollo.trim() && document.activeElement?.id === "u-anaquel") return document.getElementById("u-rollo")?.focus();
     hacer(() => ACC.ubicar(recById(S.rec), S.ubi.rollo, S.ubi.anaquel)); return listoParaUbicar();
   }
+  if (id === "oc-form") return hacer(ACC_OC.guardar);
   if (id === "rec-form") { hacer(ACC.crearRecepcion); return listoParaPesar() }
   if (id === "reg") { hacer(() => ACC.registrar(recById(S.rec))); return listoParaPesar() }
   if (id === "scan-form") {
