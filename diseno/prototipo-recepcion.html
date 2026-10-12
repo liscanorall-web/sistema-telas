@@ -175,6 +175,15 @@ tr.off td { color: var(--muted) }
 .label .l-kg strong { font: 700 clamp(22px, 13cqi, 38px)/1 var(--f-display) }
 .label .l-foot { display: flex; justify-content: space-between; font-size: 10px; border-top: 1px solid var(--paper-ink); padding-top: 5px; gap: 6px }
 
+/* Etiqueta de ubicación (anaquel o muelle), mismo papel 100 x 150 mm */
+.label.ubi { gap: 6px; text-align: center }
+.label.ubi .u-tipo { font: 700 clamp(14px, 8cqi, 22px)/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase }
+.label.ubi .u-code { font: 700 clamp(22px, 15cqi, 44px)/1 var(--f-display); letter-spacing: .02em; white-space: nowrap }
+.label.ubi .u-partes { display: flex; justify-content: space-around; border-top: 2px solid var(--paper-ink); padding-top: 6px; gap: 4px }
+.label.ubi .u-partes div { display: grid; line-height: 1 }
+.label.ubi .u-partes span { font-size: 8px; letter-spacing: .08em; text-transform: uppercase }
+.label.ubi .u-partes b { font: 700 clamp(20px, 13cqi, 38px)/1 var(--f-display) }
+
 /* Ventana */
 .scrim { position: fixed; inset: 0; background: rgba(10,14,20,.55); z-index: 40; display: grid; place-items: center; padding: 16px; overflow-y: auto }
 .dialog { background: var(--surface); border-radius: 12px; max-width: 760px; width: 100%; padding: 20px; display: grid; gap: 16px; box-shadow: var(--shadow); max-height: calc(100vh - 32px); overflow-y: auto }
@@ -509,7 +518,7 @@ const ACC_UBI = {
     }
     if (!nuevos.length) throw new Regla(`El rack ${rack} del pasillo ${pasillo} ya tiene sus ${divs} anaqueles. Para agregar divisiones, sube el número.`);
     S.ubiForm = { ...f, rack: String(rack + 1), desc: "" };
-    return `Rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""}`;
+    return `Rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""} Imprime sus etiquetas y pégalas en cada división.`;
   },
   activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se usa en recepciones ni traslados nuevos.` },
 };
@@ -517,10 +526,14 @@ function ubisActivas(tipo) { return D.ubicaciones.filter(x => x.activo && x.tipo
 function vistaUbicaciones() {
   const editar = puede("catalogo.editar"), f = S.ubiForm;
   const rollosEn = cod => D.piezas.filter(p => ["en_cuarentena", "pendiente_autorizacion", "liberada", "disponible"].includes(p.estado) && p.ubic === cod).length;
+  const imp = puede("etiqueta.imprimir");
   const fila = x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(nombreUbi(x))}${x.desc && x.pasillo ? `<br><span class="note">${esc(x.desc)}</span>` : ""}</td><td class="num">${rollosEn(x.codigo)}</td>
       <td>${x.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
-      <td>${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`;
-  const tabla = (xs, primera) => `<div class="tablewrap"><table><thead><tr><th>Código</th><th>${primera}</th><th class="num">Rollos ahí</th><th>Estado</th><th></th></tr></thead><tbody>${xs.map(fila).join("")}</tbody></table></div>`;
+      <td>${x.impresiones ? `<span class="note">Impresa${x.impresiones > 1 ? ` ×${x.impresiones}` : ""}</span>` : `<span class="pill s-warn">Sin etiqueta</span>`}</td>
+      <td><div class="acts-row" style="flex-wrap:nowrap">${imp ? `<button class="btn small" data-act="ubi-etq" data-cods="${esc(x.codigo)}" data-tit="${esc(x.codigo)}">Etiqueta</button>` : ""}
+        ${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</div></td></tr>`;
+  const tabla = (xs, primera) => `<div class="tablewrap"><table><thead><tr><th>Código</th><th>${primera}</th><th class="num">Rollos ahí</th><th>Estado</th><th>Etiqueta</th><th></th></tr></thead><tbody>${xs.map(fila).join("")}</tbody></table></div>`;
+  const botonLote = (xs, texto, tit) => imp && xs.length ? `<button class="btn small" data-act="ubi-etq" data-cods="${xs.map(x => esc(x.codigo)).join(" ")}" data-tit="${esc(tit)}">${texto}</button>` : "";
   const orden = (a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true });
   const muelles = D.ubicaciones.filter(x => x.tipo === "muelle").sort(orden), anaq = D.ubicaciones.filter(x => x.tipo === "anaquel").sort(orden);
   const pasillos = {}; anaq.filter(x => x.pasillo).forEach(x => ((pasillos[x.pasillo] ||= {})[x.rack] ||= []).push(x));
@@ -528,7 +541,8 @@ function vistaUbicaciones() {
   return `
   <section class="page-head">
     <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>El contenedor se descarga y se registra en un muelle. Los rollos se trasladan después a los anaqueles: cada pasillo tiene racks y cada división de un rack es un anaquel.</p></div>
-    <div class="counts">${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo rack</button>` : ""}</div>
+    <div class="counts">${(() => { const sin = D.ubicaciones.filter(x => x.activo && !x.impresiones); return sin.length && puede("etiqueta.imprimir") ? `<button class="btn" data-act="ubi-etq" data-cods="${sin.sort((a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true })).map(x => esc(x.codigo)).join(" ")}" data-tit="Sin etiqueta">Imprimir ${sin.length} sin etiqueta</button>` : "" })()}
+      ${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo rack</button>` : ""}</div>
   </section>
   ${f ? `<section class="card"><h2>${f.tipo === "muelle" ? "Nuevo muelle" : "Nuevo rack con sus anaqueles"}</h2>
     <p class="sub">${f.tipo === "muelle" ? "Un código corto, igual al que lleva pegado el muelle." : "Indica el pasillo, el número del rack y cuántas divisiones tiene. Se crea un anaquel por división, con su código listo para la etiqueta del anaquel."}</p>
@@ -547,14 +561,33 @@ function vistaUbicaciones() {
       <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">${f.tipo === "muelle" ? "Guardar muelle" : "Crear anaqueles"}</button></div></div>
     </form></section>` : ""}
   <section class="card">
-    <div class="grupo-head"><h2>Muelles de recepción</h2><span class="note">${TIPO_UBI.muelle[1]}</span></div>
+    <div class="grupo-head"><h2>Muelles de recepción</h2><div class="counts"><span class="note">${TIPO_UBI.muelle[1]}</span>${botonLote(muelles.filter(x => x.activo), "Etiquetas de los muelles", "Muelles")}</div></div>
     ${muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">Todavía no hay muelles. Hace falta al menos uno para abrir una recepción.</p>`}</section>
   ${Object.keys(pasillos).sort((a, b) => a - b).map(p => `<section class="card">
-    <div class="grupo-head"><h2>Pasillo ${p}</h2><span class="note">${Object.keys(pasillos[p]).length} ${Object.keys(pasillos[p]).length === 1 ? "rack" : "racks"} · ${Object.values(pasillos[p]).flat().length} anaqueles</span></div>
-    ${Object.keys(pasillos[p]).sort((a, b) => a - b).map(r => `<h3 class="eyebrow" style="margin:12px 0 4px">Rack ${r}</h3>${tabla(pasillos[p][r], "Ubicación")}`).join("")}</section>`).join("")}
+    <div class="grupo-head"><h2>Pasillo ${p}</h2><div class="counts"><span class="note">${Object.keys(pasillos[p]).length} ${Object.keys(pasillos[p]).length === 1 ? "rack" : "racks"} · ${Object.values(pasillos[p]).flat().length} anaqueles</span>${botonLote(Object.values(pasillos[p]).flat().filter(x => x.activo), "Etiquetas del pasillo", `Pasillo ${p}`)}</div></div>
+    ${Object.keys(pasillos[p]).sort((a, b) => a - b).map(r => `<div class="form-foot" style="margin:12px 0 4px"><h3 class="eyebrow" style="margin:0">Rack ${r}</h3>${botonLote(pasillos[p][r].filter(x => x.activo), "Etiquetas del rack", `Pasillo ${p} · Rack ${r}`)}</div>${tabla(pasillos[p][r], "Ubicación")}`).join("")}</section>`).join("")}
   ${sueltos.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles sin pasillo</h2><span class="note">Creados antes de ordenar por pasillo y rack</span></div>${tabla(sueltos, "Descripción")}</section>` : ""}
   ${!anaq.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles</h2></div><p class="note" style="margin:0">Todavía no hay anaqueles. Crea los racks de cada pasillo para poder trasladar los rollos y dejarlos disponibles para la venta.</p></section>` : ""}`;
 }
+function etiquetaUbi(x) {
+  const partes = x.pasillo ? [["Pasillo", x.pasillo], ["Rack", x.rack], ["Anaquel", x.div]] : null;
+  return `<div class="label ubi" aria-label="Etiqueta de ${esc(x.codigo)}">
+    <div class="l-top"><span>Almacén Principal</span><span>${x.tipo === "muelle" ? "Recepción" : "Ubicación"}</span></div>
+    <div class="u-tipo">${x.tipo === "muelle" ? "Muelle" : "Anaquel"}</div>
+    <div class="l-qr">${qrSvg(x.codigo)}</div>
+    <div class="u-code">${esc(x.codigo)}</div>
+    ${partes ? `<div class="u-partes">${partes.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("")}</div>` : `<div class="l-foot" style="justify-content:center">${esc(x.desc || "Descarga de contenedores")}</div>`}
+  </div>`;
+}
+function abrirEtiquetasUbi(codigos, titulo) { S.modal = { tipo: "ubi-lote", codigos, titulo } }
+const ACC_ETQ = {
+  imprimir(codigos) {
+    exigir("etiqueta.imprimir");
+    const xs = codigos.map(ubiPorCodigo).filter(Boolean);
+    xs.forEach(x => { x.impresiones = (x.impresiones || 0) + 1 });
+    return `${xs.length} ${xs.length === 1 ? "etiqueta enviada" : "etiquetas enviadas"} a la impresora, en orden de código. En el prototipo no salen a la impresora.`;
+  },
+};
 function previaRack(f) {
   const p = entero(f.pasillo, 1, 99), r = entero(f.rack, 1, 99), d = entero(f.divs, 1, 20);
   if (isNaN(p) || isNaN(r) || isNaN(d)) return "Los códigos saldrán así: P01-R01-A01 (pasillo, rack y anaquel).";
@@ -1206,6 +1239,13 @@ function modal() {
       <div class="lote">${pend.map(etiqueta).join("")}</div>
       <div class="acts-row"><button class="btn primary" data-act="lote-ok">Imprimir ${pend.length} ${pend.length === 1 ? "etiqueta" : "etiquetas"}</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 1000);
   }
+  if (m.tipo === "ubi-lote") {
+    const xs = m.codigos.map(ubiPorCodigo).filter(Boolean);
+    return caja(`${xs.length} ${xs.length === 1 ? "etiqueta" : "etiquetas"} de ubicación`, `${esc(m.titulo)} · etiqueta térmica 100 × 150 mm`, `
+      <p style="margin:0">Pega cada una en su división del rack. El QR lleva solo el código: al escanearlo en el traslado, llena el campo del anaquel de destino.</p>
+      <div class="lote">${xs.map(etiquetaUbi).join("")}</div>
+      <div class="acts-row"><button class="btn primary" data-act="ubi-etq-ok">Imprimir ${xs.length} ${xs.length === 1 ? "etiqueta" : "etiquetas"}</button><button class="btn" data-act="cerrar">Cancelar</button></div>`, 1000);
+  }
   if (m.tipo === "inc") return caja(m.codigo, "Registrar incidencia", `
       <div class="field"><label for="inc-desc">Qué tiene el rollo</label><textarea id="inc-desc" placeholder="Ej.: Rollo mojado en un extremo">${esc(m.desc || "")}</textarea></div>
       <p class="note" style="margin:0">El rollo queda apartado y no se libera hasta que otra persona resuelva la incidencia.</p>
@@ -1284,6 +1324,8 @@ document.addEventListener("click", e => {
     case "prov-cancelar": S.provForm = null; return render();
     case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "", pasillo: "1", rack: "1", divs: "3" }; render(); document.getElementById("uf-codigo")?.focus(); return;
     case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById(S.ubiForm.tipo === "muelle" ? "uf-codigo" : "uf-pasillo")?.focus(); return;
+    case "ubi-etq": abrirEtiquetasUbi(el.dataset.cods.split(" "), el.dataset.tit); return render();
+    case "ubi-etq-ok": return hacer(() => { const msg = ACC_ETQ.imprimir(S.modal.codigos); S.modal = null; return msg });
     case "ubi-cancelar": S.ubiForm = null; return render();
     case "ubi-activar": return hacer(() => ACC_UBI.activar(D.ubicaciones.find(x => x.id === el.dataset.id)));
     case "ubicar-fila": hacer(() => ACC.ubicar(r, el.dataset.cod, S.ubi.anaquel)); return listoParaUbicar();
