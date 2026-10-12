@@ -286,6 +286,7 @@ const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: nul
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
 function cargar() {
   try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
+  D.articulos.forEach(a => { a.linea ||= a.tela; a.categoria ??= ""; a.por ||= "color" });
   D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
   // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
   D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
@@ -343,97 +344,122 @@ function sugerirAbr(tela, color, fila) {
   return "";
 }
 function nuevaFila() { return { color: "", codigo: "", abr: "", abrTocada: false } }
-function abrirFormArticulo(desde) {
+// Catálogo en tres niveles: línea (Microfibra) → categoría (Unicolor, Estampado) → artículo (cada color o diseño, con su código).
+const POR = { color: ["Color", "colores", "Ej. Blanco"], diseno: ["Diseño", "diseños", "Ej. Flores 01"] };
+function nombreTela(linea, categoria) { return categoria ? `${linea} ${categoria.toLowerCase()}` : linea }
+function lineaDe(a) { return a.linea || a.tela }
+function abrirFormArticulo(desde, soloLinea) {
   const a = desde && art(desde);
-  S.artForm = { tela: a ? a.tela : "", unidad: a ? a.un : "kg", ancho: a?.ancho ? String(a.ancho) : "", comp: a?.comp || "",
-                tope: a ? String(a.tope).replace(".", ",") : "", fija: !!a, filas: [nuevaFila(), nuevaFila()] };
+  S.artForm = a && !soloLinea
+    ? { linea: lineaDe(a), categoria: a.categoria || "", por: a.por || "color", unidad: a.un, ancho: a.ancho ? String(a.ancho) : "", comp: a.comp || "",
+        tope: String(a.tope).replace(".", ","), fija: true, lineaFija: true, filas: [nuevaFila(), nuevaFila()] }
+    : { linea: a ? lineaDe(a) : "", categoria: "", por: "color", unidad: a ? a.un : "kg", ancho: "", comp: "", tope: "", fija: false, lineaFija: !!a, filas: [nuevaFila(), nuevaFila()] };
 }
 const ACC_ART = {
   guardar() {
     exigir("catalogo.editar");
-    const f = S.artForm, tela = f.tela.trim().replace(/\s+/g, " ");
-    if (!tela) throw new Regla("Escribe el nombre de la tela, por ejemplo Microfibra unicolor.");
+    const f = S.artForm, limpio = t => t.trim().replace(/\s+/g, " ").replace(/^./, c => c.toUpperCase());
+    let linea = limpio(f.linea), categoria = limpio(f.categoria);
+    if (!linea) throw new Regla("Escribe la línea, por ejemplo Microfibra.");
+    if (!categoria) throw new Regla("Escribe la categoría, por ejemplo Unicolor o Estampado.");
+    const misma = D.articulos.find(a => lineaDe(a).toLowerCase() === linea.toLowerCase());
+    if (misma) linea = lineaDe(misma);
+    const tela = nombreTela(linea, categoria), V = POR[f.por];
     const otra = D.articulos.find(a => a.tela.toLowerCase() === tela.toLowerCase());
-    if (otra && !f.fija) throw new Regla(`${otra.tela} ya existe. Usa “Agregar colores” en esa tela para que todos sus colores compartan unidad y ancho.`);
+    if (otra && !f.fija) throw new Regla(`${linea} ${categoria} ya existe. Usa “Agregar ${V[1]}” en esa categoría para que todos compartan unidad y ancho.`);
     const tope = f.tope.trim() ? decimal(f.tope) : UN[f.unidad].tope;
     if (!(tope > 0)) throw new Regla("El tope por rollo debe ser un número mayor que cero, con hasta 2 decimales.");
     const ancho = f.ancho.trim() ? decimal(f.ancho) : null;
     if (f.ancho.trim() && !(ancho > 0)) throw new Regla("El ancho es un número en centímetros, por ejemplo 150.");
     const filas = f.filas.filter(x => x.color.trim() || x.codigo.trim());
-    if (!filas.length) throw new Regla("Agrega al menos un color con su código.");
+    if (!filas.length) throw new Regla(`Agrega al menos un ${V[0].toLowerCase()} con su código.`);
     const codigos = new Set(D.articulos.map(a => a.codigo)), abrs = new Set(D.articulos.map(a => a.abr));
-    const colores = new Set(D.articulos.filter(a => a.tela.toLowerCase() === tela.toLowerCase()).map(a => a.color.toLowerCase()));
+    const vistos = new Set(D.articulos.filter(a => a.tela.toLowerCase() === tela.toLowerCase()).map(a => a.color.toLowerCase()));
     filas.forEach(x => {
       const n = `Fila ${f.filas.indexOf(x) + 1}`, cod = x.codigo.trim().toUpperCase(), ab = x.abr.trim().toUpperCase();
-      if (!x.color.trim()) throw new Regla(`${n}: falta el color.`);
-      if (colores.has(x.color.trim().toLowerCase())) throw new Regla(`${tela} ${x.color.trim()} ya existe en el catálogo.`);
+      if (!x.color.trim()) throw new Regla(`${n}: falta el ${V[0].toLowerCase()}.`);
+      if (vistos.has(x.color.trim().toLowerCase())) throw new Regla(`${linea} ${categoria} ${x.color.trim()} ya existe en el catálogo.`);
       if (!/^[A-Z0-9_-]{2,20}$/.test(cod)) throw new Regla(`${n}: el código lleva de 2 a 20 letras, números, guion o guion bajo, sin espacios.`);
       if (codigos.has(cod)) throw new Regla(`El código ${cod} ya está usado. Cada artículo tiene un código único.`);
       if (!/^[A-Z0-9]{2,6}$/.test(ab)) throw new Regla(`${n}: la abreviatura lleva de 2 a 6 letras o números.`);
       if (abrs.has(ab)) throw new Regla(`La abreviatura ${ab} ya está usada. Debe ser única porque va dentro del código de cada rollo.`);
-      colores.add(x.color.trim().toLowerCase()); codigos.add(cod); abrs.add(ab);
+      vistos.add(x.color.trim().toLowerCase()); codigos.add(cod); abrs.add(ab);
     });
+    const base = otra || { tela, linea, categoria, por: f.por };
     filas.forEach(x => D.articulos.push({
-      id: "a" + (++D.sec.art), tela: otra ? otra.tela : tela, color: x.color.trim().replace(/^./, c => c.toUpperCase()),
-      codigo: x.codigo.trim().toUpperCase(), abr: x.abr.trim().toUpperCase(), un: f.unidad, ancho, comp: f.comp.trim(), tope, activo: true, usada: false }));
+      id: "a" + (++D.sec.art), tela: base.tela, linea: lineaDe(base), categoria: base.categoria || categoria, por: base.por || f.por,
+      color: x.color.trim().replace(/^./, c => c.toUpperCase()), codigo: x.codigo.trim().toUpperCase(), abr: x.abr.trim().toUpperCase(),
+      un: f.unidad, ancho, comp: f.comp.trim(), tope, activo: true, usada: false }));
     S.artForm = null;
-    UI.abiertos[`tela-${D.articulos.find(a => a.tela.toLowerCase() === tela.toLowerCase()).id}`] = true; guardarUI();
-    return `${filas.length === 1 ? "1 artículo creado" : `${filas.length} artículos creados`} en ${otra ? otra.tela : tela}. Ya se pueden usar en una recepción.`;
+    const primero = t => D.articulos.find(a => a.tela.toLowerCase() === t.toLowerCase());
+    UI.abiertos[`linea-${D.articulos.find(a => lineaDe(a) === linea).id}`] = true; UI.abiertos[`tela-${primero(tela).id}`] = true; guardarUI();
+    return `${filas.length === 1 ? "1 artículo creado" : `${filas.length} artículos creados`} en ${linea} › ${categoria}. Ya se pueden usar en compras y recepciones.`;
   },
-  activar(a) { exigir("catalogo.editar"); a.activo = !a.activo; return a.activo ? `${a.codigo} activo de nuevo.` : `${a.codigo} desactivado: no aparece en recepciones nuevas.` },
+  activar(a) { exigir("catalogo.editar"); a.activo = !a.activo; return a.activo ? `${a.codigo} activo de nuevo.` : `${a.codigo} desactivado: no aparece en compras ni recepciones nuevas.` },
 };
 
 function vistaArticulos() {
-  const editar = puede("catalogo.editar"), grupos = {};
-  D.articulos.forEach(a => (grupos[a.tela] ||= []).push(a));
-  const telas = Object.keys(grupos).sort((x, y) => x.localeCompare(y, "es"));
+  const editar = puede("catalogo.editar"), lineas = {};
+  D.articulos.forEach(a => ((lineas[lineaDe(a)] ||= {})[a.tela] ||= []).push(a));
+  const orden = (x, y) => x.localeCompare(y, "es");
+  const disp = xs => xs.reduce((n, a) => n + D.piezas.filter(p => p.art === a.id && p.estado === "disponible").length, 0);
+  const rollos = n => `${n} ${n === 1 ? "rollo disponible" : "rollos disponibles"}`;
   return `
   <section class="page-head">
     <div><div class="eyebrow">Paso 1 · Catálogo</div><h1>Artículos</h1>
-      <p>Cada color de una tela es un artículo con su propio código y su abreviatura. La abreviatura va dentro del código de cada rollo, por ejemplo ${ymd(hoyISO())}-<b>MUB</b>-001.</p></div>
-    <div class="counts">${editar && !S.artForm ? `<button class="btn primary" data-act="art-nuevo">Nueva tela con sus colores</button>` : ""}</div>
+      <p>Cada línea (por ejemplo Microfibra) tiene sus categorías (Unicolor, Estampado). Cada color o diseño de una categoría es un artículo con su propio código y abreviatura, que va dentro del código de cada rollo, por ejemplo ${ymd(hoyISO())}-<b>MUB</b>-001.</p></div>
+    <div class="counts">${editar && !S.artForm ? `<button class="btn primary" data-act="art-nuevo">Nueva línea o categoría</button>` : ""}</div>
   </section>
   ${S.artForm ? formArticulo() : ""}
   ${!D.articulos.length && !S.artForm ? `<section class="card empty">
       <h2>Todavía no hay artículos</h2>
-      <p>Empieza aquí. Crea la tela (por ejemplo Microfibra unicolor), di si se controla por kilo o por metro y agrega todos sus colores con sus códigos.</p>
-      ${editar ? `<button class="btn primary" data-act="art-nuevo">Crear la primera tela</button>` : `<p class="note">Los artículos los crea el administrador o el gerente.</p>`}
+      <p>Empieza aquí. Crea la línea y su categoría (por ejemplo Microfibra › Unicolor), di si se controla por kilo o por metro y agrega sus colores o diseños con sus códigos.</p>
+      ${editar ? `<button class="btn primary" data-act="art-nuevo">Crear la primera línea</button>` : `<p class="note">Los artículos los crea el administrador o el gerente.</p>`}
       <button class="link" data-act="ejemplo">O cargar un ejemplo para probar</button></section>` : ""}
-  ${telas.length > 1 ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
-  ${telas.map(t => { const g = grupos[t], a0 = g[0], k = `tela-${a0.id}`, activos = g.filter(a => a.activo).length;
-    const disp = g.reduce((n, a) => n + D.piezas.filter(p => p.art === a.id && p.estado === "disponible").length, 0);
-    const resumen = [`${g.length} ${g.length === 1 ? "color" : "colores"}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, `${disp} ${disp === 1 ? "rollo disponible" : "rollos disponibles"}`].join(" · ");
-    return `
+  ${D.articulos.length ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
+  ${Object.keys(lineas).sort(orden).map(l => { const cats = lineas[l], todos = Object.values(cats).flat(), kl = `linea-${todos[0].id}`; return `
   <section class="card">
-    <div class="grupo-head">${plegable(k, esc(t), resumen)}
-      <div class="counts">
-        ${a0.ancho ? `<span class="note">${String(a0.ancho).replace(".", ",")} cm de ancho</span>` : ""}${a0.comp ? `<span class="note">${esc(a0.comp)}</span>` : ""}
-        ${editar && !S.artForm ? `<button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar colores</button>` : ""}</div></div>
-    ${abierto(k) ? `<div class="tablewrap"><table>
-      <thead><tr><th>Color</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
-      <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
-        <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
-        <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
-        <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
-        <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
-        <td>${editar ? `<button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}
-      </tbody></table></div>` : ""}
+    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} artículos · ${rollos(disp(todos))}`)}
+      <div class="counts">${editar && !S.artForm ? `<button class="btn small" data-act="art-cat" data-id="${todos[0].id}">Nueva categoría</button>` : ""}</div></div>
+    ${abierto(kl) ? `<div class="racks">${Object.keys(cats).sort(orden).map(t => { const g = cats[t], a0 = g[0], k = `tela-${a0.id}`, V = POR[a0.por || "color"], activos = g.filter(a => a.activo).length;
+      const resumen = [`${g.length} ${g.length === 1 ? V[0].toLowerCase() : V[1]}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, a0.ancho ? `${String(a0.ancho).replace(".", ",")} cm` : "", a0.comp ? esc(a0.comp) : "", rollos(disp(g))].filter(Boolean).join(" · ");
+      return `<div class="rack">
+      <div class="form-foot">${plegable(k, esc(a0.categoria || t), resumen, true)}
+        ${editar && !S.artForm ? `<button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar ${V[1]}</button>` : ""}</div>
+      ${abierto(k) ? `<div class="tablewrap"><table>
+        <thead><tr><th>${V[0]}</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
+          <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
+          <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
+          <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
+          <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
+          <td>${editar ? `<button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}
+        </tbody></table></div>` : ""}</div>` }).join("")}</div>` : ""}
   </section>` }).join("")}`;
 }
 
 function formArticulo() {
-  const f = S.artForm, ro = f.fija ? "readonly" : "";
+  const f = S.artForm, ro = f.fija ? "readonly" : "", V = POR[f.por];
+  const lineasExist = [...new Set(D.articulos.map(lineaDe))].sort();
   return `<section class="card">
-    <h2>${f.fija ? `Agregar colores a ${esc(f.tela)}` : "Nueva tela con sus colores"}</h2>
-    <p class="sub">Lo común a la tela se escribe una vez; abajo va una fila por color. La unidad decide cómo se recibe, se etiqueta y se cuadra cada rollo.</p>
+    <h2>${f.fija ? `Agregar ${V[1]} a ${esc(f.linea)} › ${esc(f.categoria)}` : f.lineaFija ? `Nueva categoría en ${esc(f.linea)}` : "Nueva línea o categoría"}</h2>
+    <p class="sub">Lo común a la categoría se escribe una vez; abajo va una fila por ${V[0].toLowerCase()}. La unidad decide cómo se recibe, se etiqueta y se cuadra cada rollo.</p>
     <form class="form" id="art-form">
       <div class="row2">
-        <div class="field"><label for="af-tela">Tela</label>
-          <input id="af-tela" data-af="tela" value="${esc(f.tela)}" placeholder="Ej. Microfibra unicolor" autocomplete="off" ${ro}></div>
+        <div class="field"><label for="af-linea">Línea</label>
+          <input id="af-linea" data-af="linea" list="lista-lineas" value="${esc(f.linea)}" placeholder="Ej. Microfibra" autocomplete="off" ${f.lineaFija ? "readonly" : ""}>
+          <datalist id="lista-lineas">${lineasExist.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+          <span class="hint">Si la línea ya existe, la categoría se suma a ella.</span></div>
+        <div class="field"><label for="af-cat">Categoría</label>
+          <input id="af-cat" data-af="categoria" value="${esc(f.categoria)}" placeholder="Ej. Unicolor o Estampado" autocomplete="off" ${ro}></div>
+        <div class="field"><span class="lbl" id="lbl-por">Cada artículo es un</span>
+          <div class="seg" role="group" aria-labelledby="lbl-por">
+            ${Object.keys(POR).map(k => `<button type="button" data-act="af-por" data-por="${k}" aria-pressed="${f.por === k}" ${f.fija ? "disabled" : ""}>${POR[k][0]}</button>`).join("")}</div>
+          <span class="hint">${f.por === "color" ? "Unicolor: un artículo por color." : "Estampado: un artículo por diseño."}</span></div>
         <div class="field"><span class="lbl" id="lbl-un">Se controla por</span>
           <div class="seg" role="group" aria-labelledby="lbl-un">
             ${["kg", "m"].map(k => `<button type="button" data-act="af-unidad" data-un="${k}" aria-pressed="${f.unidad === k}" ${f.fija ? "disabled" : ""}>${UN[k].nombre}</button>`).join("")}</div>
-          <span class="hint">${f.unidad === "kg" ? "Se pesa cada rollo y la etiqueta dice el peso neto en kg." : "Se mide cada rollo y la etiqueta dice el metraje en m."}</span></div>
+          <span class="hint">${f.unidad === "kg" ? "Se pesa cada rollo; la etiqueta dice el peso neto en kg." : "Se mide cada rollo; la etiqueta dice el metraje en m."}</span></div>
       </div>
       <div class="row2">
         <div class="field"><label for="af-ancho">Ancho en cm (opcional)</label><input id="af-ancho" data-af="ancho" inputmode="decimal" value="${esc(f.ancho)}" placeholder="Ej. 150" ${ro}></div>
@@ -442,26 +468,26 @@ function formArticulo() {
           <span class="hint">Avisa si alguien teclea ${f.unidad === "kg" ? "252,4 en vez de 25,24" : "500 en vez de 50,0"}.</span></div>
       </div>
       <div class="tablewrap"><table class="colores">
-        <thead><tr><th>Color</th><th>Código del artículo</th><th>Abreviatura</th><th>Así saldrá cada rollo</th><th></th></tr></thead>
+        <thead><tr><th>${V[0]}</th><th>Código del artículo</th><th>Abreviatura</th><th>Ejemplo de código de rollo</th><th></th></tr></thead>
         <tbody>${f.filas.map((x, i) => `<tr>
-          <td class="w-color"><input data-row="${i}" data-col="color" value="${esc(x.color)}" placeholder="Ej. Blanco" aria-label="Color, fila ${i + 1}" autocomplete="off"></td>
+          <td class="w-color"><input data-row="${i}" data-col="color" value="${esc(x.color)}" placeholder="${V[2]}" aria-label="${V[0]}, fila ${i + 1}" autocomplete="off"></td>
           <td class="w-cod"><input class="up" data-row="${i}" data-col="codigo" value="${esc(x.codigo)}" placeholder="Ej. MFU-001" aria-label="Código, fila ${i + 1}" autocomplete="off"></td>
           <td class="w-abr"><input class="up" data-row="${i}" data-col="abr" value="${esc(x.abr)}" maxlength="6" aria-label="Abreviatura, fila ${i + 1}" autocomplete="off"></td>
           <td class="w-prev mono note" id="prev-${i}">${x.abr ? `${ymd(hoyISO())}-${esc(x.abr)}-001` : ""}</td>
           <td>${f.filas.length > 1 ? `<button type="button" class="btn small" data-act="af-quitar" data-row="${i}" aria-label="Quitar fila ${i + 1}">Quitar</button>` : ""}</td></tr>`).join("")}
         </tbody></table></div>
       <div class="form-foot">
-        <button type="button" class="btn" data-act="af-fila">Agregar otro color</button>
+        <button type="button" class="btn" data-act="af-fila">Agregar otro ${V[0].toLowerCase()}</button>
         <div class="acts-row"><button type="button" class="btn" data-act="af-cancelar">Cancelar</button><button type="submit" class="btn primary">Guardar artículos</button></div>
       </div>
-      <p class="note" style="margin:0">La abreviatura se propone sola con las iniciales de la tela y el color; puedes cambiarla. Cuando un artículo ya tiene rollos recibidos, su abreviatura y su unidad quedan fijas.</p>
+      <p class="note" style="margin:0">Aquí solo se crean los códigos: los rollos nacen en la recepción. La abreviatura se propone sola con las iniciales de la línea, la categoría y el ${V[0].toLowerCase()}; puedes cambiarla. Cuando un artículo ya tiene rollos recibidos, su abreviatura y su unidad quedan fijas.</p>
     </form></section>`;
 }
 function refrescarSugerencias() {
   const f = S.artForm; if (!f) return;
   f.filas.forEach((x, i) => {
     if (!x.abrTocada) {
-      x.abr = sugerirAbr(f.tela, x.color, i);
+      x.abr = sugerirAbr(nombreTela(f.linea, f.categoria), x.color, i);
       const el = document.querySelector(`[data-row="${i}"][data-col="abr"]`); if (el) el.value = x.abr;
     }
     const pv = document.getElementById(`prev-${i}`); if (pv) pv.textContent = x.abr ? `${ymd(hoyISO())}-${x.abr}-001` : "";
@@ -970,7 +996,7 @@ function vistaRecepciones() {
 
 function opcionesArticulo(sel, solo) {
   const g = {}; D.articulos.filter(a => (a.activo || a.id === sel) && (!solo || solo.includes(a.id))).forEach(a => (g[a.tela] ||= []).push(a));
-  return `<option value="">Elige el artículo</option>` + Object.keys(g).sort().map(t => `<optgroup label="${esc(t)} · por ${UN[g[t][0].un].nombre.toLowerCase()}">${g[t].map(a =>
+  return `<option value="">Elige el artículo</option>` + Object.keys(g).sort().map(t => `<optgroup label="${esc(g[t][0].categoria ? `${lineaDe(g[t][0])} › ${g[t][0].categoria}` : t)} · por ${UN[g[t][0].un].nombre.toLowerCase()}">${g[t].map(a =>
     `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(a.codigo)} · ${esc(a.color)} (${UN[a.un].corto})</option>`).join("")}</optgroup>`).join("");
 }
 function formRecepcion() {
@@ -1301,19 +1327,21 @@ function modal() {
 
 // ---------------------------------------------------------------- Ejemplo opcional
 function cargarEjemplo() {
-  const add = (tela, un, ancho, comp, tope, filas) => filas.forEach(([color, codigo, abr]) =>
-    D.articulos.push({ id: "a" + (++D.sec.art), tela, color, codigo, abr, un, ancho, comp, tope, activo: true, usada: false }));
+  const add = (linea, categoria, por, un, ancho, comp, tope, filas) => filas.forEach(([color, codigo, abr]) =>
+    D.articulos.push({ id: "a" + (++D.sec.art), tela: nombreTela(linea, categoria), linea, categoria, por, color, codigo, abr, un, ancho, comp, tope, activo: true, usada: false }));
   D.sec.ubi ||= 0;
   if (!D.articulos.some(a => a.tela === "Microfibra unicolor"))
-    add("Microfibra unicolor", "kg", 150, "100% poliéster", 60, [["Blanco", "MFU-001", "MUB"], ["Negro", "MFU-002", "MUN"], ["Rojo", "MFU-003", "MUR"], ["Azul rey", "MFU-004", "MUA"]]);
+    add("Microfibra", "Unicolor", "color", "kg", 150, "100% poliéster", 60, [["Blanco", "MFU-001", "MUB"], ["Negro", "MFU-002", "MUN"], ["Rojo", "MFU-003", "MUR"], ["Azul rey", "MFU-004", "MUA"]]);
+  if (!D.articulos.some(a => a.tela === "Microfibra estampado"))
+    add("Microfibra", "Estampado", "diseno", "kg", 150, "100% poliéster", 60, [["Flores 01", "MFE-001", "MEF"], ["Geométrico 02", "MFE-002", "MEG"]]);
   if (!D.articulos.some(a => a.tela === "Gabardina stretch"))
-    add("Gabardina stretch", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
+    add("Gabardina", "Stretch", "color", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
   if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
   if (!D.ubicaciones.length) {
     D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: "MUELLE-1", tipo: "muelle", desc: "Puerta 1, descarga de contenedores", activo: true });
     [[1, 1], [1, 2]].forEach(([pasillo, rack]) => { for (let div = 1; div <= 3; div++) D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: codigoAnaquel(pasillo, rack, div), tipo: "anaquel", pasillo, rack, div, desc: "", activo: true }) });
   }
-  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor, un muelle y el pasillo 1 con 2 racks de 3 anaqueles.";
+  return "Ejemplo cargado: Microfibra con Unicolor (4 colores) y Estampado (2 diseños) por kilo, Gabardina stretch por metro en 2 colores, un proveedor, un muelle y el pasillo 1 con 2 racks de 3 anaqueles.";
 }
 
 // ---------------------------------------------------------------- Dibujo y eventos
@@ -1353,7 +1381,9 @@ document.addEventListener("click", e => {
     case "borrar-ok": try { localStorage.removeItem(CLAVE); localStorage.removeItem(CLAVE_UI) } catch (x) {} UI.abiertos = {};
       Object.assign(D, { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } });
       Object.assign(S, { artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null, ubi: { anaquel: "", rollo: "" } }); ir("articulos"); return toast("Todo borrado. Empieza por los artículos.");
-    case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-tela")?.focus(); return;
+    case "art-nuevo": abrirFormArticulo(); render(); document.getElementById("af-linea")?.focus(); return;
+    case "art-cat": abrirFormArticulo(el.dataset.id, true); render(); document.getElementById("af-cat")?.focus(); return;
+    case "af-por": S.artForm.por = el.dataset.por; return render();
     case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
     case "art-activar": return hacer(() => ACC_ART.activar(art(el.dataset.id)));
     case "af-unidad": S.artForm.unidad = el.dataset.un; return render();
@@ -1366,8 +1396,9 @@ document.addEventListener("click", e => {
     case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById(S.ubiForm.tipo === "muelle" ? "uf-codigo" : "uf-pasillo")?.focus(); return;
     case "fold": UI.abiertos[el.dataset.k] = !abierto(el.dataset.k); guardarUI(); return render();
     case "fold-todo": { const abrir = el.dataset.abrir === "1", art = el.dataset.scope === "art";
-      Object.keys(UI.abiertos).filter(k => art === k.startsWith("tela-")).forEach(k => delete UI.abiertos[k]);
-      if (abrir && art) { const vistas = new Set(); D.articulos.forEach(a => { if (!vistas.has(a.tela)) { vistas.add(a.tela); UI.abiertos[`tela-${a.id}`] = true } }) }
+      const deArt = k => k.startsWith("tela-") || k.startsWith("linea-");
+      Object.keys(UI.abiertos).filter(k => art === deArt(k)).forEach(k => delete UI.abiertos[k]);
+      if (abrir && art) { const vistas = new Set(); D.articulos.forEach(a => { [["linea", lineaDe(a)], ["tela", a.tela]].forEach(([n, v]) => { if (!vistas.has(n + v)) { vistas.add(n + v); UI.abiertos[`${n}-${a.id}`] = true } }) }) }
       if (abrir && !art) { UI.abiertos.muelles = true; D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[`p${x.pasillo}`] = true; UI.abiertos[`p${x.pasillo}-r${x.rack}`] = true }) }
       guardarUI(); return render() }
     case "ubi-etq": abrirEtiquetasUbi(el.dataset.cods.split(" "), el.dataset.tit); return render();
@@ -1409,7 +1440,7 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("input", e => {
   const t = e.target, ds = t.dataset;
-  if (ds.af) { S.artForm[ds.af] = t.value; if (ds.af === "tela") refrescarSugerencias(); return }
+  if (ds.af) { S.artForm[ds.af] = t.value; if (ds.af === "linea" || ds.af === "categoria") refrescarSugerencias(); return }
   if (ds.row !== undefined && ds.col && S.artForm) {
     const fila = S.artForm.filas[+ds.row];
     if (ds.col === "codigo" || ds.col === "abr") { const pos = t.selectionStart; t.value = t.value.toUpperCase(); try { t.setSelectionRange(pos, pos) } catch (x) {} }
