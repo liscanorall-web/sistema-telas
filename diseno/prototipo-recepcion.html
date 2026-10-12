@@ -479,47 +479,86 @@ function vistaProveedores() {
 
 // ---------------------------------------------------------------- Módulo 3 · Ubicaciones
 function ubiPorCodigo(cod) { return D.ubicaciones.find(x => x.codigo === String(cod).trim().toUpperCase()) }
-const TIPO_UBI = { muelle: ["Muelle", "Donde se descarga el contenedor y se registran los rollos"], anaquel: ["Anaquel", "Donde se guardan los rollos disponibles para la venta"] };
+const TIPO_UBI = { muelle: ["Muelle", "Donde se descarga el contenedor y se registran los rollos"], anaquel: ["Rack", "Cada división del rack es un anaquel, donde se guardan los rollos disponibles para la venta"] };
+const dos = n => String(n).padStart(2, "0");
+function codigoAnaquel(pasillo, rack, div) { return `P${dos(pasillo)}-R${dos(rack)}-A${dos(div)}` }
+function nombreUbi(x) { return x.tipo === "anaquel" && x.pasillo ? `Pasillo ${x.pasillo} · Rack ${x.rack} · Anaquel ${x.div}` : x.desc || "" }
+function entero(txt, min, max) { const n = Number(String(txt).trim()); return Number.isInteger(n) && n >= min && n <= max ? n : NaN }
 const ACC_UBI = {
   guardar() {
     exigir("catalogo.editar");
-    const f = S.ubiForm, cod = f.codigo.trim().toUpperCase(), tipo = TIPO_UBI[f.tipo][0].toLowerCase();
-    if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla(`El código del ${tipo} lleva letras, números o guion, sin espacios. Por ejemplo ${f.tipo === "muelle" ? "MUELLE-1" : "A-01-03"}.`);
-    if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada ubicación tiene un código único.`);
-    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: f.tipo, desc: f.desc.trim(), activo: true });
-    S.ubiForm = { tipo: f.tipo, codigo: "", desc: "" };
-    return `${TIPO_UBI[f.tipo][0]} ${cod} creado. Puedes escribir el siguiente.`;
+    const f = S.ubiForm;
+    if (f.tipo === "muelle") {
+      const cod = f.codigo.trim().toUpperCase();
+      if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla("El código del muelle lleva letras, números o guion, sin espacios. Por ejemplo MUELLE-1.");
+      if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada ubicación tiene un código único.`);
+      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "muelle", desc: f.desc.trim(), activo: true });
+      S.ubiForm = { ...f, codigo: "", desc: "" };
+      return `Muelle ${cod} creado.`;
+    }
+    const pasillo = entero(f.pasillo, 1, 99), rack = entero(f.rack, 1, 99), divs = entero(f.divs, 1, 20);
+    if (isNaN(pasillo)) throw new Regla("El pasillo es un número del 1 al 99.");
+    if (isNaN(rack)) throw new Regla("El rack es un número del 1 al 99.");
+    if (isNaN(divs)) throw new Regla("Las divisiones del rack son un número del 1 al 20.");
+    const nuevos = [], ya = [];
+    for (let d = 1; d <= divs; d++) {
+      const cod = codigoAnaquel(pasillo, rack, d);
+      if (ubiPorCodigo(cod)) { ya.push(cod); continue }
+      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "anaquel", pasillo, rack, div: d, desc: f.desc.trim(), activo: true });
+      nuevos.push(cod);
+    }
+    if (!nuevos.length) throw new Regla(`El rack ${rack} del pasillo ${pasillo} ya tiene sus ${divs} anaqueles. Para agregar divisiones, sube el número.`);
+    S.ubiForm = { ...f, rack: String(rack + 1), desc: "" };
+    return `Rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""}`;
   },
   activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se usa en recepciones ni traslados nuevos.` },
 };
-function ubisActivas(tipo) { return D.ubicaciones.filter(x => x.activo && x.tipo === tipo) }
+function ubisActivas(tipo) { return D.ubicaciones.filter(x => x.activo && x.tipo === tipo).sort((a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true })) }
 function vistaUbicaciones() {
   const editar = puede("catalogo.editar"), f = S.ubiForm;
   const rollosEn = cod => D.piezas.filter(p => ["en_cuarentena", "pendiente_autorizacion", "liberada", "disponible"].includes(p.estado) && p.ubic === cod).length;
-  const grupo = tipo => { const xs = D.ubicaciones.filter(x => x.tipo === tipo); return `<section class="card">
-    <div class="grupo-head"><h2>${tipo === "muelle" ? "Muelles de recepción" : "Anaqueles"}</h2><span class="note">${TIPO_UBI[tipo][1]}</span></div>
-    ${xs.length ? `<div class="tablewrap"><table>
-    <thead><tr><th>Código</th><th>Descripción</th><th>Almacén</th><th class="num">Rollos ahí</th><th>Estado</th><th></th></tr></thead>
-    <tbody>${xs.map(x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(x.desc)}</td><td>Almacén Principal</td><td class="num">${rollosEn(x.codigo)}</td>
+  const fila = x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(nombreUbi(x))}${x.desc && x.pasillo ? `<br><span class="note">${esc(x.desc)}</span>` : ""}</td><td class="num">${rollosEn(x.codigo)}</td>
       <td>${x.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
-      <td>${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}</tbody>
-    </table></div>` : `<p class="note" style="margin:0">Todavía no hay ${tipo === "muelle" ? "muelles. Hace falta al menos uno para abrir una recepción." : "anaqueles. Hacen falta para trasladar los rollos y dejarlos disponibles para la venta."}</p>`}</section>` };
+      <td>${editar ? `<button class="btn small" data-act="ubi-activar" data-id="${x.id}">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`;
+  const tabla = (xs, primera) => `<div class="tablewrap"><table><thead><tr><th>Código</th><th>${primera}</th><th class="num">Rollos ahí</th><th>Estado</th><th></th></tr></thead><tbody>${xs.map(fila).join("")}</tbody></table></div>`;
+  const orden = (a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true });
+  const muelles = D.ubicaciones.filter(x => x.tipo === "muelle").sort(orden), anaq = D.ubicaciones.filter(x => x.tipo === "anaquel").sort(orden);
+  const pasillos = {}; anaq.filter(x => x.pasillo).forEach(x => ((pasillos[x.pasillo] ||= {})[x.rack] ||= []).push(x));
+  const sueltos = anaq.filter(x => !x.pasillo);
   return `
   <section class="page-head">
-    <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>El contenedor se descarga y se registra en un muelle. Cuando toda la recepción está confirmada, los rollos se trasladan a los anaqueles y solo entonces quedan disponibles para la venta.</p></div>
-    <div class="counts">${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo anaquel</button>` : ""}</div>
+    <div><div class="eyebrow">Paso 3 · Catálogo</div><h1>Ubicaciones</h1><p>El contenedor se descarga y se registra en un muelle. Los rollos se trasladan después a los anaqueles: cada pasillo tiene racks y cada división de un rack es un anaquel.</p></div>
+    <div class="counts">${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo rack</button>` : ""}</div>
   </section>
-  ${f ? `<section class="card"><h2>Nueva ubicación</h2><p class="sub">Un código corto, igual al que lleva pegado el sitio, para escanearlo o escribirlo. Para anaqueles, un orden útil es pasillo, anaquel y nivel.</p>
-    <form class="form" id="ubi-form"><div class="row2">
+  ${f ? `<section class="card"><h2>${f.tipo === "muelle" ? "Nuevo muelle" : "Nuevo rack con sus anaqueles"}</h2>
+    <p class="sub">${f.tipo === "muelle" ? "Un código corto, igual al que lleva pegado el muelle." : "Indica el pasillo, el número del rack y cuántas divisiones tiene. Se crea un anaquel por división, con su código listo para la etiqueta del anaquel."}</p>
+    <form class="form" id="ubi-form">
       <div class="field"><span class="lbl" id="lbl-tipo">Tipo</span>
-        <div class="seg" role="group" aria-labelledby="lbl-tipo">${Object.keys(TIPO_UBI).map(k => `<button type="button" data-act="uf-tipo" data-tipo="${k}" aria-pressed="${f.tipo === k}">${TIPO_UBI[k][0]}</button>`).join("")}</div>
-        <span class="hint">${TIPO_UBI[f.tipo][1]}.</span></div>
-      <div class="field"><label for="uf-codigo">Código</label><input id="uf-codigo" class="mono" data-uf="codigo" value="${esc(f.codigo)}" placeholder="${f.tipo === "muelle" ? "Ej. MUELLE-1" : "Ej. A-01-03"}" autocomplete="off" style="text-transform:uppercase"></div>
-      <div class="field"><label for="uf-desc">Descripción (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="${f.tipo === "muelle" ? "Ej. Puerta 1, descarga de contenedores" : "Ej. Pasillo A, anaquel 1, nivel 3"}" autocomplete="off"></div></div>
-      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">Guardar ${TIPO_UBI[f.tipo][0].toLowerCase()}</button></div></div>
+        <div class="seg" role="group" aria-labelledby="lbl-tipo">${Object.keys(TIPO_UBI).map(k => `<button type="button" data-act="uf-tipo" data-tipo="${k}" aria-pressed="${f.tipo === k}">${TIPO_UBI[k][0]}</button>`).join("")}</div></div>
+      ${f.tipo === "muelle" ? `<div class="row2">
+        <div class="field"><label for="uf-codigo">Código</label><input id="uf-codigo" class="mono" data-uf="codigo" value="${esc(f.codigo)}" placeholder="Ej. MUELLE-1" autocomplete="off" style="text-transform:uppercase"></div>
+        <div class="field"><label for="uf-desc">Descripción (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="Ej. Puerta 1, descarga de contenedores" autocomplete="off"></div></div>`
+      : `<div class="row2">
+        <div class="field"><label for="uf-pasillo">Pasillo</label><input id="uf-pasillo" data-uf="pasillo" inputmode="numeric" value="${esc(f.pasillo)}" placeholder="Ej. 1" autocomplete="off"></div>
+        <div class="field"><label for="uf-rack">Rack</label><input id="uf-rack" data-uf="rack" inputmode="numeric" value="${esc(f.rack)}" placeholder="Ej. 1" autocomplete="off"></div>
+        <div class="field"><label for="uf-divs">Divisiones (anaqueles)</label><input id="uf-divs" data-uf="divs" inputmode="numeric" value="${esc(f.divs)}" placeholder="Ej. 3" autocomplete="off"></div>
+        <div class="field"><label for="uf-desc">Nota (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="Ej. Rack de telas pesadas" autocomplete="off"></div></div>
+        <p class="note" id="uf-prev" style="margin:0">${previaRack(f)}</p>`}
+      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">${f.tipo === "muelle" ? "Guardar muelle" : "Crear anaqueles"}</button></div></div>
     </form></section>` : ""}
-  ${grupo("muelle")}
-  ${grupo("anaquel")}`;
+  <section class="card">
+    <div class="grupo-head"><h2>Muelles de recepción</h2><span class="note">${TIPO_UBI.muelle[1]}</span></div>
+    ${muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">Todavía no hay muelles. Hace falta al menos uno para abrir una recepción.</p>`}</section>
+  ${Object.keys(pasillos).sort((a, b) => a - b).map(p => `<section class="card">
+    <div class="grupo-head"><h2>Pasillo ${p}</h2><span class="note">${Object.keys(pasillos[p]).length} ${Object.keys(pasillos[p]).length === 1 ? "rack" : "racks"} · ${Object.values(pasillos[p]).flat().length} anaqueles</span></div>
+    ${Object.keys(pasillos[p]).sort((a, b) => a - b).map(r => `<h3 class="eyebrow" style="margin:12px 0 4px">Rack ${r}</h3>${tabla(pasillos[p][r], "Ubicación")}`).join("")}</section>`).join("")}
+  ${sueltos.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles sin pasillo</h2><span class="note">Creados antes de ordenar por pasillo y rack</span></div>${tabla(sueltos, "Descripción")}</section>` : ""}
+  ${!anaq.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles</h2></div><p class="note" style="margin:0">Todavía no hay anaqueles. Crea los racks de cada pasillo para poder trasladar los rollos y dejarlos disponibles para la venta.</p></section>` : ""}`;
+}
+function previaRack(f) {
+  const p = entero(f.pasillo, 1, 99), r = entero(f.rack, 1, 99), d = entero(f.divs, 1, 20);
+  if (isNaN(p) || isNaN(r) || isNaN(d)) return "Los códigos saldrán así: P01-R01-A01 (pasillo, rack y anaquel).";
+  return `Se crearán ${d === 1 ? "el anaquel" : `${d} anaqueles`}: ${Array.from({ length: d }, (_, k) => codigoAnaquel(p, r, k + 1)).join(", ")}.`;
 }
 
 // ---------------------------------------------------------------- Módulo 4 · Órdenes de compra
@@ -1039,12 +1078,12 @@ function panelUbicar(r) {
   return `<div class="card" id="ubicar">
     <h2>Trasladar rollos del muelle a los anaqueles</h2>
     <p class="sub">Escanea el anaquel y después cada rollo que pones en él. El anaquel se queda puesto hasta que escanees otro. Cada rollo trasladado queda disponible para la venta.</p>
-    ${!activos.length ? `<p class="banner warn">No hay anaqueles activos. <button class="link" data-act="ir" data-v="ubicaciones">Crea los anaqueles</button> para poder trasladar.</p>` : ""}
+    ${!activos.length ? `<p class="banner warn">No hay anaqueles activos. <button class="link" data-act="ir" data-v="ubicaciones">Crea los racks y sus anaqueles</button> para poder trasladar.</p>` : ""}
     <form class="form" id="ubic-form">
       <div class="row2">
         <div class="field"><label for="u-anaquel">Anaquel de destino</label>
-          <input id="u-anaquel" class="big" list="lista-anaqueles" value="${esc(S.ubi.anaquel)}" placeholder="Ej. A-01-03" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}>
-          <datalist id="lista-anaqueles">${activos.map(x => `<option value="${esc(x.codigo)}">${esc(x.desc)}</option>`).join("")}</datalist></div>
+          <input id="u-anaquel" class="big" list="lista-anaqueles" value="${esc(S.ubi.anaquel)}" placeholder="Ej. P01-R01-A02" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}>
+          <datalist id="lista-anaqueles">${activos.map(x => `<option value="${esc(x.codigo)}">${esc(nombreUbi(x))}</option>`).join("")}</datalist></div>
         <div class="field"><label for="u-rollo">Rollo</label>
           <input id="u-rollo" class="big" value="${esc(S.ubi.rollo)}" placeholder="Escanea la etiqueta" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}></div>
       </div>
@@ -1127,7 +1166,7 @@ function vistaPieza() {
       <div><dt>Cantidad actual</dt><dd class="mono">${cant(p.actual, p.un)}</dd></div>
       <div><dt>Dato del fabricante</dt><dd class="mono">${p.fab ? cant(p.fab, p.un) : "No anotado"}</dd></div>
       <div><dt>Recepción</dt><dd><button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button> · ${esc(r.doc)}</dd></div>
-      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}${p.estado === "disponible" ? " (anaquel)" : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
+      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}${p.estado === "disponible" ? ` (${esc(nombreUbi(ubiPorCodigo(p.ubic) || {}) || "anaquel")})` : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
     </dl>
     ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el muelle ${esc(p.ubic)}. No se vende hasta trasladarlo a su anaquel.</div>`
       : p.estado === "disponible" ? `<div class="banner ok">Disponible en el anaquel ${esc(p.ubic)}. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
@@ -1190,9 +1229,11 @@ function cargarEjemplo() {
   if (!D.articulos.some(a => a.tela === "Gabardina stretch"))
     add("Gabardina stretch", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
   if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
-  if (!D.ubicaciones.length) [["MUELLE-1", "muelle", "Puerta 1, descarga de contenedores"], ["A-01-01", "anaquel", "Pasillo A, anaquel 1, nivel 1"], ["A-01-02", "anaquel", "Pasillo A, anaquel 1, nivel 2"], ["B-01-01", "anaquel", "Pasillo B, anaquel 1, nivel 1"]]
-    .forEach(([codigo, tipo, desc]) => D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo, tipo, desc, activo: true }));
-  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor, un muelle y 3 anaqueles.";
+  if (!D.ubicaciones.length) {
+    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: "MUELLE-1", tipo: "muelle", desc: "Puerta 1, descarga de contenedores", activo: true });
+    [[1, 1], [1, 2]].forEach(([pasillo, rack]) => { for (let div = 1; div <= 3; div++) D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: codigoAnaquel(pasillo, rack, div), tipo: "anaquel", pasillo, rack, div, desc: "", activo: true }) });
+  }
+  return "Ejemplo cargado: microfibra por kilo en 4 colores, gabardina stretch por metro en 2 colores, un proveedor, un muelle y el pasillo 1 con 2 racks de 3 anaqueles.";
 }
 
 // ---------------------------------------------------------------- Dibujo y eventos
@@ -1241,8 +1282,8 @@ document.addEventListener("click", e => {
     case "af-cancelar": S.artForm = null; return render();
     case "prov-nuevo": S.provForm = { codigo: "", nombre: "", fiscal: "", pais: "" }; render(); document.getElementById("pf-codigo")?.focus(); return;
     case "prov-cancelar": S.provForm = null; return render();
-    case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "" }; render(); document.getElementById("uf-codigo")?.focus(); return;
-    case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById("uf-codigo")?.focus(); return;
+    case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "", pasillo: "1", rack: "1", divs: "3" }; render(); document.getElementById("uf-codigo")?.focus(); return;
+    case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById(S.ubiForm.tipo === "muelle" ? "uf-codigo" : "uf-pasillo")?.focus(); return;
     case "ubi-cancelar": S.ubiForm = null; return render();
     case "ubi-activar": return hacer(() => ACC_UBI.activar(D.ubicaciones.find(x => x.id === el.dataset.id)));
     case "ubicar-fila": hacer(() => ACC.ubicar(r, el.dataset.cod, S.ubi.anaquel)); return listoParaUbicar();
@@ -1289,7 +1330,7 @@ document.addEventListener("input", e => {
     return refrescarSugerencias();
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
-  if (ds.uf) { S.ubiForm[ds.uf] = t.value; return }
+  if (ds.uf) { S.ubiForm[ds.uf] = t.value; const pv = document.getElementById("uf-prev"); if (pv) pv.textContent = previaRack(S.ubiForm); return }
   if (t.id === "u-anaquel") { S.ubi.anaquel = t.value; return }
   if (t.id === "u-rollo") { S.ubi.rollo = t.value; return }
   if (ds.rf) { S.recForm[ds.rf] = t.value; return }
@@ -1317,7 +1358,7 @@ document.addEventListener("submit", e => {
   const id = e.target.id;
   if (id === "art-form") return hacer(ACC_ART.guardar);
   if (id === "prov-form") return hacer(ACC_PROV.guardar);
-  if (id === "ubi-form") { hacer(ACC_UBI.guardar); return document.getElementById("uf-codigo")?.focus() }
+  if (id === "ubi-form") { hacer(ACC_UBI.guardar); return document.getElementById(S.ubiForm?.tipo === "muelle" ? "uf-codigo" : "uf-rack")?.focus() }
   if (id === "ubic-form") {
     // Escáner: tras leer el anaquel, el foco pasa al rollo; tras cada rollo, vuelve al rollo.
     if (S.ubi.anaquel.trim() && !S.ubi.rollo.trim() && document.activeElement?.id === "u-anaquel") return document.getElementById("u-rollo")?.focus();
