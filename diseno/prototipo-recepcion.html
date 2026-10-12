@@ -335,15 +335,37 @@ function abrUsadas(excluirFila) {
   (S.artForm?.filas || []).forEach((f, i) => { if (i !== excluirFila && f.abr) s.add(f.abr) });
   return s;
 }
-function sugerirAbr(tela, color, fila) {
+function sugerirAbr(tela, color, fila, extra) {
   const base = iniciales(tela, 3), col = letras(color);
   if (!base || !col) return "";
-  const usadas = abrUsadas(fila);
+  const usadas = abrUsadas(fila); (extra || []).forEach(x => usadas.add(x));
   for (let k = 1; k <= col.length && base.length + k <= 6; k++) { const c = base + col.slice(0, k); if (!usadas.has(c)) return c }
   for (let d = 2; d < 10; d++) { const c = (base + col[0]).slice(0, 5) + d; if (!usadas.has(c)) return c }
   return "";
 }
-function nuevaFila() { return { color: "", codigo: "", abr: "", abrTocada: false } }
+function nuevaFila() { return { color: "", codigo: "", abr: "", abrTocada: false, codTocado: false } }
+// Código sugerido: prefijo con las iniciales de línea y categoría + número correlativo, sin chocar con ningún código existente.
+const RX_COD = /^([A-Z0-9]+)-(\d+)$/;
+function prefijoDe(cod) { return RX_COD.exec(cod)?.[1] }
+function prefijoCategoria(linea, categoria) {
+  const tela = nombreTela(limpioNombre(linea || ""), limpioNombre(categoria || "")).toLowerCase();
+  const propio = D.articulos.filter(a => a.tela.toLowerCase() === tela).map(a => prefijoDe(a.codigo)).find(Boolean);
+  if (propio) return propio;
+  const ajenos = new Set(D.articulos.filter(a => a.tela.toLowerCase() !== tela).map(a => prefijoDe(a.codigo)).filter(Boolean));
+  const L = letras(linea || ""), C = letras(categoria || "") || L.slice(1);
+  if (!L) return "";
+  const cands = [];
+  for (let i = 1; i < L.length; i++) for (let j = 0; j < C.length; j++) cands.push(L[0] + L[i] + C[j]);
+  for (let i = 1; i < L.length; i++) for (let j = 0; j + 1 < C.length; j++) cands.push(L[0] + L[i] + C[j] + C[j + 1]);
+  for (let d = 2; d < 10; d++) cands.push(L.slice(0, 2) + (C[0] || "") + d);
+  return cands.find(c => !ajenos.has(c)) || "";
+}
+function siguienteNumero(prefijo, ocupados) {
+  let n = 0;
+  [...D.articulos.map(a => a.codigo), ...ocupados].forEach(c => { const m = RX_COD.exec(c); if (m && m[1] === prefijo) n = Math.max(n, Number(m[2])) });
+  return n + 1;
+}
+function codigoLibre(prefijo, ocupados) { return prefijo ? `${prefijo}-${String(siguienteNumero(prefijo, ocupados)).padStart(3, "0")}` : "" }
 // Catálogo en tres niveles: línea (Microfibra) → categoría (Unicolor, Estampado) → artículo (cada color o diseño, con su código).
 const POR = { color: ["Color", "colores", "Ej. Blanco"], diseno: ["Diseño", "diseños", "Ej. Flores 01"] };
 function nombreTela(linea, categoria) { return categoria ? `${linea} ${categoria.toLowerCase()}` : linea }
@@ -380,9 +402,9 @@ const ACC_ART = {
       if (!x.color.trim()) throw new Regla(`${n}: falta el ${V[0].toLowerCase()}.`);
       if (vistos.has(x.color.trim().toLowerCase())) throw new Regla(`${linea} ${categoria} ${x.color.trim()} ya existe en el catálogo.`);
       if (!/^[A-Z0-9_-]{2,20}$/.test(cod)) throw new Regla(`${n}: el código lleva de 2 a 20 letras, números, guion o guion bajo, sin espacios.`);
-      if (codigos.has(cod)) throw new Regla(`El código ${cod} ya está usado. Cada artículo tiene un código único.`);
+      if (codigos.has(cod)) throw new Regla(`El código ${cod} ya está usado. Cada artículo tiene un código único. Libre: ${codigoLibre(prefijoDe(cod) || prefijoCategoria(f.linea, f.categoria), [...codigos, ...f.filas.map(r => r.codigo.trim().toUpperCase())])}.`);
       if (!/^[A-Z0-9]{2,6}$/.test(ab)) throw new Regla(`${n}: la abreviatura lleva de 2 a 6 letras o números.`);
-      if (abrs.has(ab)) throw new Regla(`La abreviatura ${ab} ya está usada. Debe ser única porque va dentro del código de cada rollo.`);
+      if (abrs.has(ab)) throw new Regla(`La abreviatura ${ab} ya está usada. Debe ser única porque va dentro del código de cada rollo.${(() => { const sug = sugerirAbr(nombreTela(f.linea, f.categoria), x.color, -1, abrs); return sug ? ` Libre: ${sug}.` : "" })()}`);
       vistos.add(x.color.trim().toLowerCase()); codigos.add(cod); abrs.add(ab);
     });
     const base = otra || { tela, linea, categoria, por: f.por };
@@ -562,7 +584,7 @@ function formArticulo() {
         <thead><tr><th>${V[0]}</th><th>Código del artículo</th><th>Abreviatura</th><th>Ejemplo de código de rollo</th><th></th></tr></thead>
         <tbody>${f.filas.map((x, i) => `<tr>
           <td class="w-color"><input data-row="${i}" data-col="color" value="${esc(x.color)}" placeholder="${V[2]}" aria-label="${V[0]}, fila ${i + 1}" autocomplete="off"></td>
-          <td class="w-cod"><input class="up" data-row="${i}" data-col="codigo" value="${esc(x.codigo)}" placeholder="Ej. MFU-001" aria-label="Código, fila ${i + 1}" autocomplete="off"></td>
+          <td class="w-cod"><input class="up" data-row="${i}" data-col="codigo" value="${esc(x.codigo)}" placeholder="${esc(codigoLibre(prefijoCategoria(f.linea, f.categoria), []) || "Se propone solo")}" aria-label="Código, fila ${i + 1}" autocomplete="off"></td>
           <td class="w-abr"><input class="up" data-row="${i}" data-col="abr" value="${esc(x.abr)}" maxlength="6" aria-label="Abreviatura, fila ${i + 1}" autocomplete="off"></td>
           <td class="w-prev mono note" id="prev-${i}">${x.abr ? `${ymd(hoyISO())}-${esc(x.abr)}-001` : ""}</td>
           <td>${f.filas.length > 1 ? `<button type="button" class="btn small" data-act="af-quitar" data-row="${i}" aria-label="Quitar fila ${i + 1}">Quitar</button>` : ""}</td></tr>`).join("")}
@@ -571,11 +593,18 @@ function formArticulo() {
         <button type="button" class="btn" data-act="af-fila">Agregar otro ${V[0].toLowerCase()}</button>
         <div class="acts-row"><button type="button" class="btn" data-act="af-cancelar">Cancelar</button><button type="submit" class="btn primary">Guardar artículos</button></div>
       </div>
-      <p class="note" style="margin:0">Aquí solo se crean los códigos: los rollos nacen en la recepción. La abreviatura se propone sola con las iniciales de la línea, la categoría y el ${V[0].toLowerCase()}; puedes cambiarla. Cuando un artículo ya tiene rollos recibidos, su abreviatura y su unidad quedan fijas.</p>
+      <p class="note" style="margin:0">Aquí solo se crean los códigos: los rollos nacen en la recepción. El código y la abreviatura se proponen solos con las iniciales de la línea, la categoría y el ${V[0].toLowerCase()}, sin repetir ninguno que ya exista; puedes cambiarlos. Cuando un artículo ya tiene rollos recibidos, su abreviatura y su unidad quedan fijas.</p>
     </form></section>`;
 }
 function refrescarSugerencias() {
   const f = S.artForm; if (!f) return;
+  const pref = prefijoCategoria(f.linea, f.categoria), ocupados = f.filas.filter(x => x.codTocado).map(x => x.codigo.trim().toUpperCase());
+  f.filas.forEach((x, i) => {
+    if (x.codTocado) return;
+    x.codigo = x.color.trim() && pref ? codigoLibre(pref, ocupados) : "";
+    if (x.codigo) ocupados.push(x.codigo);
+    const el = document.querySelector(`[data-row="${i}"][data-col="codigo"]`); if (el) el.value = x.codigo;
+  });
   f.filas.forEach((x, i) => {
     if (!x.abrTocada) {
       x.abr = sugerirAbr(nombreTela(f.linea, f.categoria), x.color, i);
@@ -1545,6 +1574,7 @@ document.addEventListener("input", e => {
     if (ds.col === "codigo" || ds.col === "abr") { const pos = t.selectionStart; t.value = t.value.toUpperCase(); try { t.setSelectionRange(pos, pos) } catch (x) {} }
     fila[ds.col] = t.value;
     if (ds.col === "abr") fila.abrTocada = t.value.trim() !== "";
+    if (ds.col === "codigo") fila.codTocado = t.value.trim() !== "";
     return refrescarSugerencias();
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
