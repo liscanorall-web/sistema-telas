@@ -1,0 +1,37 @@
+# Avance de la Fase 3 (diseño)
+
+Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 13). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+
+Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
+
+## Flujo acordado
+
+1. **Artículos**: se crean antes de comprar. Hay tres niveles: línea (Microfibra), categoría (Unicolor, Estampado) y artículo (cada color o diseño, con su código y abreviatura).
+   - El código y la abreviatura se proponen solos y nunca se repiten.
+   - La unidad (kilo o metro), el ancho y el tope van por categoría.
+   - Línea, categoría y nombre del color o diseño se pueden editar. El código y la abreviatura no cambian nunca, y cada cambio queda anotado.
+2. **Proveedores**.
+3. **Ubicaciones**:
+   - Muelles de recepción.
+   - Pasillo, luego rack, luego anaquel (cada división del rack), con código P01-R01-A01.
+   - Un rack se crea con todas sus divisiones de una vez.
+   - Hay etiquetas QR para anaqueles y muelles, que se imprimen por ubicación, por rack o por pasillo.
+4. **Compras**: el gerente general registra la orden de compra con lo pedido.
+5. **Recepción**: el gerente de recepción la abre desde la orden de compra (trae lo pendiente).
+   - Corrige según la factura, anota el número de contenedor y elige el muelle.
+   - Los rollos se registran de corrido en el muelle y las etiquetas se imprimen en lote.
+   - Después vienen la verificación, la aprobación del gerente general con el cuadre (pedido, facturado y recibido) y la liberación.
+   - Al final, el **traslado** a anaqueles por escaneo: primero el anaquel, luego cada rollo. Solo entonces el rollo queda disponible para la venta.
+   - La recepción se cierra con el último traslado.
+   - Se guardan los **tiempos** de cada etapa y el total.
+
+Pasillos, racks, líneas y categorías se muestran plegados. Lo que cada persona despliega se recuerda en su navegador.
+
+## Pendiente
+
+- **Decisión de Richard**: el tiempo de la recepción, ¿cuenta desde que llega el contenedor (recomendado) o desde que se abre en el sistema?
+- **Base de datos**: pasar a la base lo validado. Eso incluye línea y categoría (ajustando la migración 0007), compras, muelles, pasillo/rack/anaquel, traslado, estado "disponible" y tiempos.
+- **PR #1**: lo fusiona Richard. Después se aplica la migración en Supabase.
+- **Ideas propuestas**:
+  - pestaña de Existencias (lo disponible por artículo y anaquel, para ventas);
+  - etiqueta de anaquel más chica, si hace falta.
