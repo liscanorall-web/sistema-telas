@@ -377,6 +377,7 @@ const ACC_ART = {
       id: "a" + (++D.sec.art), tela: otra ? otra.tela : tela, color: x.color.trim().replace(/^./, c => c.toUpperCase()),
       codigo: x.codigo.trim().toUpperCase(), abr: x.abr.trim().toUpperCase(), un: f.unidad, ancho, comp: f.comp.trim(), tope, activo: true, usada: false }));
     S.artForm = null;
+    UI.abiertos[`tela-${D.articulos.find(a => a.tela.toLowerCase() === tela.toLowerCase()).id}`] = true; guardarUI();
     return `${filas.length === 1 ? "1 artículo creado" : `${filas.length} artículos creados`} en ${otra ? otra.tela : tela}. Ya se pueden usar en una recepción.`;
   },
   activar(a) { exigir("catalogo.editar"); a.activo = !a.activo; return a.activo ? `${a.codigo} activo de nuevo.` : `${a.codigo} desactivado: no aparece en recepciones nuevas.` },
@@ -398,13 +399,17 @@ function vistaArticulos() {
       <p>Empieza aquí. Crea la tela (por ejemplo Microfibra unicolor), di si se controla por kilo o por metro y agrega todos sus colores con sus códigos.</p>
       ${editar ? `<button class="btn primary" data-act="art-nuevo">Crear la primera tela</button>` : `<p class="note">Los artículos los crea el administrador o el gerente.</p>`}
       <button class="link" data-act="ejemplo">O cargar un ejemplo para probar</button></section>` : ""}
-  ${telas.map(t => { const g = grupos[t], a0 = g[0]; return `
+  ${telas.length > 1 ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
+  ${telas.map(t => { const g = grupos[t], a0 = g[0], k = `tela-${a0.id}`, activos = g.filter(a => a.activo).length;
+    const disp = g.reduce((n, a) => n + D.piezas.filter(p => p.art === a.id && p.estado === "disponible").length, 0);
+    const resumen = [`${g.length} ${g.length === 1 ? "color" : "colores"}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, `${disp} ${disp === 1 ? "rollo disponible" : "rollos disponibles"}`].join(" · ");
+    return `
   <section class="card">
-    <div class="grupo-head"><h2>${esc(t)}</h2>
-      <div class="counts"><span class="pill plain s-info">Por ${UN[a0.un].nombre.toLowerCase()}</span>
+    <div class="grupo-head">${plegable(k, esc(t), resumen)}
+      <div class="counts">
         ${a0.ancho ? `<span class="note">${String(a0.ancho).replace(".", ",")} cm de ancho</span>` : ""}${a0.comp ? `<span class="note">${esc(a0.comp)}</span>` : ""}
         ${editar && !S.artForm ? `<button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar colores</button>` : ""}</div></div>
-    <div class="tablewrap"><table>
+    ${abierto(k) ? `<div class="tablewrap"><table>
       <thead><tr><th>Color</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
       <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
         <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
@@ -412,7 +417,7 @@ function vistaArticulos() {
         <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
         <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
         <td>${editar ? `<button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button>` : ""}</td></tr>`).join("")}
-      </tbody></table></div>
+      </tbody></table></div>` : ""}
   </section>` }).join("")}`;
 }
 
@@ -1360,8 +1365,10 @@ document.addEventListener("click", e => {
     case "ubi-nuevo": S.ubiForm = { tipo: el.dataset.tipo || "anaquel", codigo: "", desc: "", pasillo: "1", rack: "1", divs: "3" }; render(); document.getElementById("uf-codigo")?.focus(); return;
     case "uf-tipo": S.ubiForm.tipo = el.dataset.tipo; render(); document.getElementById(S.ubiForm.tipo === "muelle" ? "uf-codigo" : "uf-pasillo")?.focus(); return;
     case "fold": UI.abiertos[el.dataset.k] = !abierto(el.dataset.k); guardarUI(); return render();
-    case "fold-todo": { const abrir = el.dataset.abrir === "1"; UI.abiertos = {};
-      if (abrir) { UI.abiertos.muelles = true; D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[`p${x.pasillo}`] = true; UI.abiertos[`p${x.pasillo}-r${x.rack}`] = true }) }
+    case "fold-todo": { const abrir = el.dataset.abrir === "1", art = el.dataset.scope === "art";
+      Object.keys(UI.abiertos).filter(k => art === k.startsWith("tela-")).forEach(k => delete UI.abiertos[k]);
+      if (abrir && art) { const vistas = new Set(); D.articulos.forEach(a => { if (!vistas.has(a.tela)) { vistas.add(a.tela); UI.abiertos[`tela-${a.id}`] = true } }) }
+      if (abrir && !art) { UI.abiertos.muelles = true; D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[`p${x.pasillo}`] = true; UI.abiertos[`p${x.pasillo}-r${x.rack}`] = true }) }
       guardarUI(); return render() }
     case "ubi-etq": abrirEtiquetasUbi(el.dataset.cods.split(" "), el.dataset.tit); return render();
     case "ubi-etq-ok": return hacer(() => { const msg = ACC_ETQ.imprimir(S.modal.codigos); S.modal = null; return msg });
