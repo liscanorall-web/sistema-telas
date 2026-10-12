@@ -192,10 +192,14 @@ tr.off td { color: var(--muted) }
 .fold.chico .fold-t { font-size: 17px }
 .fold .fold-r { display: block }
 .fold:hover .fold-t { color: var(--accent) }
+.fold:disabled { cursor: default; color: inherit } .fold:disabled:hover .fold-t { color: inherit }
 .racks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 10px; padding-left: 28px; border-left: 2px solid var(--line); margin-left: 8px }
 .rack { min-width: 0 }
 .rack + .rack { border-top: 1px solid var(--line); padding-top: 6px }
 @media (max-width: 640px) { .racks { padding-left: 12px; margin-left: 4px } }
+
+tr.hit td { background: var(--accent-soft) }
+#art-buscar { padding: 10px 14px; font-family: var(--f-body) }
 
 /* Ventana */
 .scrim { position: fixed; inset: 0; background: rgba(10,14,20,.55); z-index: 40; display: grid; place-items: center; padding: 16px; overflow-y: auto }
@@ -511,9 +515,28 @@ function modalEdicion(m, caja) {
   return "";
 }
 
+// Búsqueda rápida: por texto (todas las palabras deben aparecer) o por escáner. Una etiqueta de rollo lleva su código
+// (AAAAMMDD-ABR-NNN) en la primera línea; de ahí sale la abreviatura y con ella el artículo.
+function buscarArticulos(q) {
+  const n = t => sinAcentos(String(t || "")).toLowerCase();
+  const txt = String(q).trim().split(/\n/)[0].trim();
+  if (!txt) return { lista: D.articulos, exacto: null, nota: "" };
+  const up = txt.toUpperCase();
+  const rollo = /^\d{8}-([A-Z0-9]+)-\d+$/.exec(up), porRollo = rollo && D.articulos.find(a => a.abr === rollo[1]);
+  const exacto = porRollo || D.articulos.find(a => a.codigo === up || a.abr === up);
+  if (exacto) {
+    const p = rollo && D.piezas.find(x => x.codigo === up);
+    return { lista: [exacto], exacto: exacto.id, nota: rollo ? `El rollo ${esc(up)} es del artículo ${esc(exacto.codigo)}${p ? ` · ${EST_PIEZA[p.estado][0].toLowerCase()}${p.estado === "disponible" ? ` en ${esc(p.ubic)}` : ""}` : " · ese rollo todavía no está registrado"}.` : `Artículo ${esc(exacto.codigo)}.` };
+  }
+  const palabras = n(txt).split(/\s+/);
+  const lista = D.articulos.filter(a => { const h = n(`${a.codigo} ${a.abr} ${lineaDe(a)} ${a.categoria} ${a.color} ${a.comp}`); return palabras.every(w => h.includes(w)) });
+  return { lista, exacto: lista.length === 1 ? lista[0].id : null,
+           nota: lista.length ? `${lista.length} de ${D.articulos.length} artículos coinciden con “${esc(txt)}”.` : `Ningún artículo coincide con “${esc(txt)}”. Prueba con otra palabra o con el código.` };
+}
 function vistaArticulos() {
   const editar = puede("catalogo.editar"), lineas = {};
-  D.articulos.forEach(a => ((lineas[lineaDe(a)] ||= {})[a.tela] ||= []).push(a));
+  const q = S.buscarArt || "", res = buscarArticulos(q);
+  res.lista.forEach(a => ((lineas[lineaDe(a)] ||= {})[a.tela] ||= []).push(a));
   const orden = (x, y) => x.localeCompare(y, "es");
   const disp = xs => xs.reduce((n, a) => n + D.piezas.filter(p => p.art === a.id && p.estado === "disponible").length, 0);
   const rollos = n => `${n} ${n === 1 ? "rollo disponible" : "rollos disponibles"}`;
@@ -523,25 +546,29 @@ function vistaArticulos() {
       <p>Cada línea (por ejemplo Microfibra) tiene sus categorías (Unicolor, Estampado). Cada color o diseño de una categoría es un artículo con su propio código y abreviatura, que va dentro del código de cada rollo, por ejemplo ${ymd(hoyISO())}-<b>MUB</b>-001.</p></div>
     <div class="counts">${editar && !S.artForm ? `<button class="btn primary" data-act="art-nuevo">Nueva línea o categoría</button>` : ""}</div>
   </section>
+  ${D.articulos.length && !S.artForm ? `<form class="scan" id="art-buscar-form" role="search" style="flex:none">
+      <input id="art-buscar" value="${esc(q)}" placeholder="Buscar por código, abreviatura, línea, categoría, color o diseño. También puedes escanear la etiqueta de un rollo." aria-label="Buscar artículo" autocomplete="off">
+      ${q ? `<button class="btn" type="button" data-act="art-buscar-limpiar">Limpiar</button>` : ""}</form>
+    ${q ? `<p class="note" style="margin:-8px 0 0">${res.nota}</p>` : ""}` : ""}
   ${S.artForm ? formArticulo() : ""}
   ${!D.articulos.length && !S.artForm ? `<section class="card empty">
       <h2>Todavía no hay artículos</h2>
       <p>Empieza aquí. Crea la línea y su categoría (por ejemplo Microfibra › Unicolor), di si se controla por kilo o por metro y agrega sus colores o diseños con sus códigos.</p>
       ${editar ? `<button class="btn primary" data-act="art-nuevo">Crear la primera línea</button>` : `<p class="note">Los artículos los crea el administrador o el gerente.</p>`}
       <button class="link" data-act="ejemplo">O cargar un ejemplo para probar</button></section>` : ""}
-  ${D.articulos.length ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
+  ${D.articulos.length && !q ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
   ${Object.keys(lineas).sort(orden).map(l => { const cats = lineas[l], todos = Object.values(cats).flat(), kl = `linea-${todos[0].id}`; return `
   <section class="card">
-    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} ${todos.length === 1 ? "artículo" : "artículos"} · ${rollos(disp(todos))}`)}
+    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} ${todos.length === 1 ? "artículo" : "artículos"} · ${rollos(disp(todos))}`, false, !!q)}
       <div class="counts">${editar && !S.artForm ? `<button class="btn small" data-act="ed-linea" data-id="${todos[0].id}">Editar</button><button class="btn small" data-act="art-cat" data-id="${todos[0].id}">Nueva categoría</button>` : ""}</div></div>
-    ${abierto(kl) ? `<div class="racks">${Object.keys(cats).sort(orden).map(t => { const g = cats[t], a0 = g[0], k = `tela-${a0.id}`, V = POR[a0.por || "color"], activos = g.filter(a => a.activo).length;
+    ${q || abierto(kl) ? `<div class="racks">${Object.keys(cats).sort(orden).map(t => { const g = cats[t], a0 = g[0], k = `tela-${a0.id}`, V = POR[a0.por || "color"], activos = g.filter(a => a.activo).length;
       const resumen = [`${g.length} ${g.length === 1 ? V[0].toLowerCase() : V[1]}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, a0.ancho ? `${String(a0.ancho).replace(".", ",")} cm` : "", a0.comp ? esc(a0.comp) : "", rollos(disp(g))].filter(Boolean).join(" · ");
       return `<div class="rack">
-      <div class="form-foot">${plegable(k, esc(a0.categoria || t), a0.categoria ? resumen : `${resumen} · sin categoría: usa Editar`, true)}
+      <div class="form-foot">${plegable(k, esc(a0.categoria || t), a0.categoria ? resumen : `${resumen} · sin categoría: usa Editar`, true, !!q)}
         ${editar && !S.artForm ? `<div class="acts-row"><button class="btn small" data-act="ed-cat" data-id="${a0.id}">Editar</button><button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar ${V[1]}</button></div>` : ""}</div>
-      ${abierto(k) ? `<div class="tablewrap"><table>
+      ${q || abierto(k) ? `<div class="tablewrap"><table>
         <thead><tr><th>${V[0]}</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}">
+        <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}${res.exacto === a.id ? " hit" : ""}" ${res.exacto === a.id ? 'id="art-hit"' : ""}>
           <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
           <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
           <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
@@ -695,8 +722,9 @@ const UI = { abiertos: {} };
 try { Object.assign(UI, JSON.parse(localStorage.getItem(CLAVE_UI) || "{}")) } catch (e) {}
 function guardarUI() { try { localStorage.setItem(CLAVE_UI, JSON.stringify(UI)) } catch (e) {} }
 function abierto(k) { return !!UI.abiertos[k] }
-function plegable(k, titulo, resumen, chico) {
-  return `<button class="fold${chico ? " chico" : ""}" data-act="fold" data-k="${k}" aria-expanded="${abierto(k)}"><span class="chev" aria-hidden="true">▸</span>
+// forzado: mientras hay una búsqueda todo se ve desplegado y no se puede plegar (no toca lo que la persona dejó guardado).
+function plegable(k, titulo, resumen, chico, forzado) {
+  return `<button class="fold${chico ? " chico" : ""}" ${forzado ? "disabled" : `data-act="fold" data-k="${k}"`} aria-expanded="${forzado || abierto(k)}"><span class="chev" aria-hidden="true">▸</span>
     <span><span class="fold-t">${titulo}</span><span class="note fold-r">${resumen}</span></span></button>`;
 }
 function resumenUbi(xs, racks) {
@@ -1509,6 +1537,7 @@ document.addEventListener("click", e => {
     case "ed-var": { const a = art(el.dataset.id); S.modal = { tipo: "ed-var", id: a.id, color: a.color }; render(); return document.getElementById("em-var")?.select() }
     case "em-set": S.modal[el.dataset.k] = el.dataset.v; return render();
     case "em-ok": { const m = S.modal; return hacer(() => { const msg = m.tipo === "ed-linea" ? ACC_EDIT.linea(m.viejo, m.linea) : m.tipo === "ed-cat" ? ACC_EDIT.categoria(m.tela, m) : ACC_EDIT.variante(art(m.id), m.color); S.modal = null; return msg }) }
+    case "art-buscar-limpiar": S.buscarArt = ""; render(); document.getElementById("art-buscar")?.focus(); return;
     case "art-cat": abrirFormArticulo(el.dataset.id, true); render(); document.getElementById("af-cat")?.focus(); return;
     case "af-por": S.artForm.por = el.dataset.por; return render();
     case "art-mas": abrirFormArticulo(el.dataset.id); render(); document.querySelector('[data-row="0"][data-col="color"]')?.focus(); return;
@@ -1563,6 +1592,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && S.modal) { S.modal = null; render() }
+  else if (e.key === "Escape" && e.target.id === "art-buscar" && S.buscarArt) { S.buscarArt = ""; render(); document.getElementById("art-buscar")?.focus() }
   if (e.key === "Enter" && e.target.dataset?.em !== undefined) { e.preventDefault(); document.querySelector('[data-act="em-ok"]')?.click() }
   if (e.key === "Enter" && e.target.matches("tr.click")) e.target.click();
 });
@@ -1579,6 +1609,7 @@ document.addEventListener("input", e => {
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
   if (ds.em) { S.modal[ds.em] = t.value; return }
+  if (t.id === "art-buscar") { S.buscarArt = t.value; const pos = t.selectionStart; render(); const i = document.getElementById("art-buscar"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos) } catch (x) {} } return }
   if (ds.uf) { S.ubiForm[ds.uf] = t.value; const pv = document.getElementById("uf-prev"); if (pv) pv.textContent = previaRack(S.ubiForm); return }
   if (t.id === "u-anaquel") { S.ubi.anaquel = t.value; return }
   if (t.id === "u-rollo") { S.ubi.rollo = t.value; return }
@@ -1607,6 +1638,9 @@ document.addEventListener("submit", e => {
   const id = e.target.id;
   if (id === "art-form") return hacer(ACC_ART.guardar);
   if (id === "prov-form") return hacer(ACC_PROV.guardar);
+  if (id === "art-buscar-form") { const i = document.getElementById("art-buscar"); S.buscarArt = i.value; render();
+    const hit = document.getElementById("art-hit"); if (hit) hit.scrollIntoView({ block: "center" });
+    const j = document.getElementById("art-buscar"); j?.focus(); j?.select(); return }
   if (id === "ubi-form") { hacer(ACC_UBI.guardar); return document.getElementById(S.ubiForm?.tipo === "muelle" ? "uf-codigo" : "uf-rack")?.focus() }
   if (id === "ubic-form") {
     // Escáner: tras leer el anaquel, el foco pasa al rollo; tras cada rollo, vuelve al rollo.

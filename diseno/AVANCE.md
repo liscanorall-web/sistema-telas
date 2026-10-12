@@ -1,6 +1,6 @@
 # Avance de la Fase 3 (diseño)
 
-Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 13). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 14). Su fuente es `prototipo-recepcion.html` en esta carpeta.
 
 Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
 
@@ -10,6 +10,7 @@ Los datos que se cargan en el prototipo se guardan solo en el navegador de quien
    - El código y la abreviatura se proponen solos y nunca se repiten.
    - La unidad (kilo o metro), el ancho y el tope van por categoría.
    - Línea, categoría y nombre del color o diseño se pueden editar. El código y la abreviatura no cambian nunca, y cada cambio queda anotado.
+   - Búsqueda rápida, tecleando o con escáner: por código, abreviatura, línea, categoría, color o diseño. Al escanear la etiqueta de un rollo muestra su artículo, su estado y su anaquel.
 2. **Proveedores**.
 3. **Ubicaciones**:
    - Muelles de recepción.
