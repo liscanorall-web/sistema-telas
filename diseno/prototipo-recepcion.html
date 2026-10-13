@@ -199,6 +199,8 @@ tr.off td { color: var(--muted) }
 @media (max-width: 640px) { .racks { padding-left: 12px; margin-left: 4px } }
 
 tr.hit td { background: var(--accent-soft) }
+#aj-rollo::placeholder, [data-ajn]::placeholder { text-transform: none }
+.sec-t { font: 700 17px/1.2 var(--f-display); margin: 6px 0 -8px }
 #art-buscar, #ex-buscar { padding: 10px 14px; font-family: var(--f-body) }
 .exist { background: none; border: 0; padding: 2px 0; cursor: pointer; text-align: right; display: inline-flex; flex-direction: column; align-items: flex-end; color: inherit; font: inherit }
 .exist b { font-weight: 700; font-size: 15px }
@@ -255,12 +257,12 @@ tr.sub > td { background: var(--surface-2, transparent); padding-top: 0 }
 <script>
 "use strict";
 // ---------------------------------------------------------------- Personas y permisos de ejemplo
-const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "compra.crear", "etiqueta.imprimir"];
+const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "compra.crear", "etiqueta.imprimir", "ajuste.crear", "ajuste.aprobar", "ajuste.motivos"];
 const USERS = {
   admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
-  ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir"] },
-  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir"] },
-  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "compra.crear", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir"] },
+  ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear"] },
+  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear"] },
+  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "compra.crear", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir", "ajuste.aprobar"] },
 };
 const UN = {
   kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
@@ -284,16 +286,18 @@ const EST_PIEZA = {
   disponible:             ["Disponible para venta", "s-ok"],
   rechazada:              ["Rechazada", "s-bad"],
   anulada:                ["Anulada", "s-off"],
+  agotado:                ["Agotado", "s-off"],
 };
 const EVENTO = {
   registrada: "Registrado en recepción", etiqueta: "Etiqueta impresa", incidencia: "Incidencia registrada",
   incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado de cuarentena", ubicada: "Trasladado a anaquel",
   rechazada: "Rechazado", anulada: "Anulado",
+  ajuste_entrada: "Ajuste de entrada", ajuste_salida: "Ajuste de salida", creada_ajuste: "Creado por ajuste de entrada",
 };
 
 // ---------------------------------------------------------------- Estado (solo en este navegador)
 const CLAVE = "telas-prototipo-v2";
-const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0 } };
+const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], ajustes: [], motivos: null, contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0, aje: 0, ajs: 0 } };
 const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
             artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null,
             form: { art: "", peso: "", fab: "" }, ubi: { anaquel: "", rollo: "" }, motivo: "", sel: {} };
@@ -301,7 +305,7 @@ function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catc
 function cargar() {
   try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
   D.articulos.forEach(a => { a.linea ||= a.tela; a.categoria ??= ""; a.por ||= "color" });
-  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
+  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ajustes ||= []; D.sec.aje ||= 0; D.sec.ajs ||= 0; D.motivos ||= JSON.parse(JSON.stringify(MOTIVOS_BASE)); D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
   // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
   D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
 }
@@ -1418,9 +1422,16 @@ function tablaTiempos(r) {
 }
 
 // ---------------------------------------------------------------- Etiqueta y ficha
+// Un rollo nace en una recepción o en un ajuste de entrada aprobado.
+function origenDe(p) {
+  const r = p.rec && recById(p.rec);
+  if (r) return { fecha: r.fecha, numero: r.numero, quien: prov(r.prov)?.nombre || "", doc: r.doc, act: `data-act="abrir" data-id="${r.id}"` };
+  const aj = D.ajustes.find(x => x.id === p.aj);
+  return { fecha: aj.fecha, numero: aj.numero, quien: "Ajuste de entrada", doc: aj.motivo, act: `data-act="ir" data-v="ajustes"` };
+}
 function textoQR(p) {
   const a = art(p.art);
-  return `${p.codigo}\n${a.codigo} ${nombreArt(a)}\n${UN[p.un].campo}: ${cant(p.cantidad, p.un)}\nRecibido: ${dmy(recById(p.rec).fecha)}`;
+  return `${p.codigo}\n${a.codigo} ${nombreArt(a)}\n${UN[p.un].campo}: ${cant(p.cantidad, p.un)}\nRecibido: ${dmy(origenDe(p).fecha)}`;
 }
 function qrSvg(texto) {
   if (typeof qrcode !== "function") return `<svg viewBox="0 0 10 10" role="img" aria-label="QR no disponible"><rect width="10" height="10" fill="#fff" stroke="#000" stroke-width=".3"/><text x="5" y="5.6" font-size="1.2" text-anchor="middle" fill="#000">QR</text></svg>`;
@@ -1431,9 +1442,9 @@ function qrSvg(texto) {
   return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" role="img" aria-label="Código QR del rollo" shape-rendering="crispEdges"><rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 function etiqueta(p) {
-  const r = recById(p.rec), a = art(p.art);
+  const r = origenDe(p), a = art(p.art);
   return `<div class="label" aria-label="Etiqueta de ${p.codigo}">
-    <div class="l-top"><span>${esc(prov(r.prov)?.nombre)}</span><span>${r.numero}</span></div>
+    <div class="l-top"><span>${esc(r.quien)}</span><span>${r.numero}</span></div>
     <div class="l-code">${p.codigo}</div>
     <div class="l-qr">${qrSvg(textoQR(p))}</div>
     <div class="l-art"><b>${esc(a.codigo)}</b><br>${esc(nombreArt(a))}${a.ancho ? ` · ${String(a.ancho).replace(".", ",")} cm` : ""}</div>
@@ -1442,18 +1453,18 @@ function etiqueta(p) {
   </div>`;
 }
 function vistaPieza() {
-  const p = D.piezas.find(x => x.codigo === S.pieza), r = recById(p.rec), a = art(p.art);
+  const p = D.piezas.find(x => x.codigo === S.pieza), r = origenDe(p), a = art(p.art);
   return `
-  <div><button class="link" data-act="abrir" data-id="${r.id}">← ${r.numero}</button></div>
+  <div><button class="link" ${r.act}>← ${r.numero}</button></div>
   <section class="card rec-head">
     <div class="eyebrow">Ficha del rollo · lo que abre el QR dentro de la aplicación</div>
     <div class="rec-title"><h1>${p.codigo}</h1>${pillPieza(p.estado)}</div>
     <dl class="facts">
       <div><dt>Artículo</dt><dd>${esc(a.codigo)} · ${esc(nombreArt(a))}</dd></div>
       <div><dt>${UN[p.un].campo} inicial</dt><dd class="mono">${cant(p.cantidad, p.un)}</dd></div>
-      <div><dt>Cantidad actual</dt><dd class="mono">${cant(p.actual, p.un)}</dd></div>
+      <div><dt>Cantidad actual</dt><dd class="mono">${cant(cantDe(p), p.un)}</dd></div>
       <div><dt>Dato del fabricante</dt><dd class="mono">${p.fab ? cant(p.fab, p.un) : "No anotado"}</dd></div>
-      <div><dt>Recepción</dt><dd><button class="link" data-act="abrir" data-id="${r.id}">${r.numero}</button> · ${esc(r.doc)}</dd></div>
+      <div><dt>${p.rec ? "Recepción" : "Origen"}</dt><dd><button class="link" ${r.act}>${r.numero}</button> · ${esc(r.doc)}</dd></div>
       <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}${p.estado === "disponible" ? ` (${esc(nombreUbi(ubiPorCodigo(p.ubic) || {}) || "anaquel")})` : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
     </dl>
     ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el muelle ${esc(p.ubic)}. No se vende hasta trasladarlo a su anaquel.</div>`
@@ -1548,7 +1559,7 @@ function filtroExistencias(q) {
   return { arts: new Set(r.lista.map(a => a.id)), anaquel: null, rollo: p ? p.codigo : null, exacto: r.exacto, nota: r.nota };
 }
 function sumaPorUnidad(ps) {
-  const t = {}; ps.forEach(p => { t[p.un] = r2((t[p.un] || 0) + p.cantidad) });
+  const t = {}; ps.forEach(p => { t[p.un] = r2((t[p.un] || 0) + cantDe(p)) });
   return Object.keys(t).map(u => cant(t[u], u)).join(" · ") || "—";
 }
 function vistaExistencias() {
@@ -1560,7 +1571,7 @@ function vistaExistencias() {
   const rollos = n => `${n} ${n === 1 ? "rollo" : "rollos"}`;
   const orden = (x, y) => x.localeCompare(y, "es");
   const chip = p => `<button class="rollo-chip${f.rollo === p.codigo ? " hit" : ""}" data-act="ficha" data-cod="${p.codigo}" ${f.rollo === p.codigo ? 'id="ex-hit"' : ""}>
-      <span class="mono">${p.codigo}</span> · ${cant(p.cantidad, p.un)}${p.estado === "disponible" && modo === "articulo" ? ` · ${esc(p.ubic)}` : ""}</button>`;
+      <span class="mono">${p.codigo}</span> · ${cant(cantDe(p), p.un)}${p.estado === "disponible" && modo === "articulo" ? ` · ${esc(p.ubic)}` : ""}</button>`;
   let cuerpo = "";
   if (modo === "articulo") {
     const arts = D.articulos.filter(a => (!f.arts || f.arts.has(a.id)) && (S.exTodos && !f.anaquel || disp.some(p => p.art === a.id) || proc.some(p => p.art === a.id)));
@@ -1622,6 +1633,185 @@ function vistaExistencias() {
   ${cuerpo || `<section class="card empty"><p>${q ? "Nada disponible con esa búsqueda." : modo === "anaquel" ? "Todavía no hay rollos en anaqueles. Quedan disponibles al trasladarlos desde el muelle." : "Todavía no hay rollos disponibles."}</p></section>`}`}`;
 }
 
+// ---------------------------------------------------------------- Módulo 7 · Ajustes de inventario
+// Sumar o restar lo que no viene de una compra ni de una venta. Cada ajuste es un documento numerado (AJE / AJS),
+// con motivo obligatorio; solo mueve existencias cuando lo aprueba un gerente distinto de quien lo registró.
+const MOTIVOS_BASE = { entrada: ["Sobrante encontrado", "Rollo sin registrar", "Error de registro"], salida: ["Faltante", "Daño", "Merma", "Muestra", "Error de registro"] };
+const TIPO_AJ = { entrada: ["Ajuste de entrada", "AJE", "+"], salida: ["Ajuste de salida", "AJS", "−"] };
+const EST_AJ = { pendiente: ["Por aprobar", "s-warn"], aprobado: ["Aprobado", "s-ok"], rechazado: ["Rechazado", "s-bad"] };
+function cantDe(p) { return p.actual ?? p.cantidad }
+function ajustePendienteDe(cod) { return D.ajustes.find(x => x.estado === "pendiente" && x.lineas.some(l => l.cod === cod)) }
+function abrirFormAjuste(tipo) { S.ajForm = { tipo, motivo: "", nota: "", rollo: "", lineas: [], nuevo: { art: "", cant: "", anaquel: "" } } }
+// Un rollo entra al ajuste por escaneo: debe estar en su anaquel y no estar en otro ajuste por aprobar.
+function rolloParaAjuste(q) {
+  const cod = String(q || "").trim().split(/\n/)[0].trim().toUpperCase(), p = D.piezas.find(x => x.codigo === cod);
+  if (!cod) throw new Regla("Escanea o escribe el código del rollo.");
+  if (!p) throw new Regla(`No existe el rollo ${cod}.`);
+  if (p.estado !== "disponible") throw new Regla(`El rollo ${cod} está ${EST_PIEZA[p.estado][0].toLowerCase()}: solo se ajustan rollos ubicados en su anaquel.`);
+  const otro = ajustePendienteDe(cod); if (otro) throw new Regla(`El rollo ${cod} ya está en el ${otro.numero}, por aprobar.`);
+  return p;
+}
+const ACC_AJ = {
+  agregarRollo() {
+    const f = S.ajForm, p = rolloParaAjuste(f.rollo);
+    if (f.lineas.some(l => l.cod === p.codigo)) throw new Regla(`${p.codigo} ya está en este ajuste.`);
+    f.lineas.push({ cod: p.codigo, cant: "" }); f.rollo = "";
+  },
+  agregarNuevo() {
+    const f = S.ajForm, n = f.nuevo, a = art(n.art), c = decimal(n.cant), x = ubiPorCodigo(n.anaquel);
+    if (!a) throw new Regla("Elige el artículo del rollo nuevo.");
+    if (!(c > 0)) throw new Regla(`Escribe la cantidad del rollo nuevo en ${UN[a.un].corto}, con hasta 2 decimales.`);
+    if (c > a.tope) throw new Regla(`${cant(c, a.un)} supera el tope por rollo de ${a.codigo} (${cant(a.tope, a.un)}). Revisa la cantidad.`);
+    if (!x || x.tipo !== "anaquel" || !x.activo) throw new Regla("Escanea o elige el anaquel donde queda el rollo nuevo.");
+    f.lineas.push({ nuevo: true, art: a.id, cant: n.cant.trim(), anaquel: x.codigo }); f.nuevo = { art: n.art, cant: "", anaquel: x.codigo };
+  },
+  guardar() {
+    exigir("ajuste.crear");
+    const f = S.ajForm, T = TIPO_AJ[f.tipo];
+    if (!f.motivo) throw new Regla("Elige el motivo del ajuste.");
+    if (!f.lineas.length) throw new Regla(f.tipo === "salida" ? "Escanea al menos un rollo." : "Agrega al menos un rollo.");
+    const lineas = f.lineas.map(l => {
+      if (l.nuevo) return { nuevo: true, art: l.art, cant: decimal(l.cant), anaquel: l.anaquel };
+      const p = D.piezas.find(x => x.codigo === l.cod), c = decimal(l.cant);
+      if (!(c > 0)) throw new Regla(`${l.cod}: escribe cuánto ${f.tipo === "salida" ? "restar" : "sumar"}, en ${UN[p.un].corto} con hasta 2 decimales.`);
+      if (f.tipo === "salida" && c > cantDe(p)) throw new Regla(`${l.cod} tiene ${cant(cantDe(p), p.un)}: no se le pueden restar ${cant(c, p.un)}.`);
+      return { cod: l.cod, art: p.art, cant: c };
+    });
+    const n = ++D.sec[T[1].toLowerCase()];
+    const aj = { id: "aj" + (D.ajustes.length + 1), numero: `${T[1]}-${String(n).padStart(6, "0")}`, tipo: f.tipo, motivo: f.motivo, nota: f.nota.trim(),
+                 fecha: hoyISO(), hora: hoy(), por: S.user, estado: "pendiente", lineas, creados: [] };
+    D.ajustes.push(aj); S.ajForm = null;
+    return `${aj.numero} registrado. Las existencias no cambian hasta que un gerente lo apruebe.`;
+  },
+  aprobar(aj) {
+    exigir("ajuste.aprobar");
+    if (aj.estado !== "pendiente") throw new Regla(`${aj.numero} ya fue ${aj.estado}.`);
+    if (aj.por === S.user) throw new Regla("Quien registra un ajuste no lo aprueba. Debe aprobarlo otro gerente.");
+    aj.lineas.forEach(l => {   // se revisa de nuevo: el rollo pudo cambiar mientras esperaba
+      if (l.nuevo) return;
+      const p = D.piezas.find(x => x.codigo === l.cod);
+      if (p.estado !== "disponible") throw new Regla(`${l.cod} ya no está disponible en su anaquel. Rechaza el ajuste y regístralo de nuevo.`);
+      if (aj.tipo === "salida" && l.cant > cantDe(p)) throw new Regla(`${l.cod} ya no tiene ${cant(l.cant, p.un)}. Rechaza el ajuste y regístralo de nuevo.`);
+    });
+    const nota = `${aj.numero} · ${aj.motivo}`;
+    aj.lineas.forEach(l => {
+      if (l.nuevo) {
+        const a = art(l.art), p = { codigo: siguienteCodigo(aj.fecha, a.abr, true), art: a.id, un: a.un, rec: null, aj: aj.id, cantidad: l.cant, actual: l.cant, fab: null,
+                                    estado: "disponible", ubic: l.anaquel, impresiones: 0, eventos: [] };
+        evento(p, "creada_ajuste", null, "disponible", `${nota} · ${cant(l.cant, a.un)} en ${l.anaquel}`);
+        D.piezas.push(p); a.usada = true; aj.creados.push(p.codigo); l.cod = p.codigo; return;
+      }
+      const p = D.piezas.find(x => x.codigo === l.cod), antes = cantDe(p);
+      p.actual = r2(aj.tipo === "salida" ? antes - l.cant : antes + l.cant);
+      const fin = p.actual === 0 ? "agotado" : p.estado;
+      evento(p, aj.tipo === "salida" ? "ajuste_salida" : "ajuste_entrada", p.estado, fin, `${nota} · ${cant(antes, p.un)} → ${cant(p.actual, p.un)}`);
+      p.estado = fin;
+    });
+    Object.assign(aj, { estado: "aprobado", decision: { por: S.user, hora: hoy() } });
+    return `${aj.numero} aprobado. Las existencias ya cambiaron${aj.creados.length ? `; imprime ${aj.creados.length === 1 ? "la etiqueta del rollo nuevo" : `las ${aj.creados.length} etiquetas de los rollos nuevos`}` : ""}.`;
+  },
+  rechazar(aj, motivo) {
+    exigir("ajuste.aprobar");
+    if (aj.estado !== "pendiente") throw new Regla(`${aj.numero} ya fue ${aj.estado}.`);
+    if (!String(motivo || "").trim()) throw new Regla("Escribe por qué se rechaza.");
+    Object.assign(aj, { estado: "rechazado", decision: { por: S.user, hora: hoy(), motivo: motivo.trim() } });
+    return `${aj.numero} rechazado. Las existencias no cambiaron y el número no se reutiliza.`;
+  },
+  imprimir(aj) {
+    exigir("etiqueta.imprimir");
+    const ps = aj.creados.map(c => D.piezas.find(p => p.codigo === c)).filter(p => !p.impresiones);
+    if (!ps.length) throw new Regla("No hay etiquetas pendientes en este ajuste.");
+    ps.forEach(p => { p.impresiones = 1; evento(p, "etiqueta", null, null, "Primera impresión, en lote") });
+    return `${ps.length} ${ps.length === 1 ? "etiqueta enviada" : "etiquetas enviadas"} a la impresora. En el prototipo no salen a la impresora.`;
+  },
+  motivo(tipo, nombre) {
+    exigir("ajuste.motivos");
+    const m = limpioNombre(nombre || "");
+    if (!m) throw new Regla("Escribe el nombre del motivo.");
+    if (D.motivos[tipo].some(x => x.toLowerCase() === m.toLowerCase())) throw new Regla(`“${m}” ya existe.`);
+    D.motivos[tipo].push(m); S.motivoNuevo = { ...S.motivoNuevo, [tipo]: "" };
+    return `Motivo “${m}” agregado a los ajustes de ${tipo}.`;
+  },
+};
+function formAjuste() {
+  const f = S.ajForm, T = TIPO_AJ[f.tipo], sal = f.tipo === "salida";
+  const filas = f.lineas.map((l, i) => {
+    if (l.nuevo) { const a = art(l.art); return `<tr><td><span class="pill s-info plain">Rollo nuevo</span></td><td class="art"><span class="mono">${esc(a.codigo)}</span> · ${esc(nombreArt(a))}</td><td class="mono">${esc(l.anaquel)}</td>
+      <td class="num">—</td><td class="num">+ ${cant(decimal(l.cant), a.un)}</td><td class="num">${cant(decimal(l.cant), a.un)}</td><td><button type="button" class="btn small" data-act="aj-quitar" data-row="${i}">Quitar</button></td></tr>` }
+    const p = D.piezas.find(x => x.codigo === l.cod), a = art(p.art), c = decimal(l.cant), queda = c > 0 ? r2(sal ? cantDe(p) - c : cantDe(p) + c) : null;
+    return `<tr><td class="mono">${esc(p.codigo)}</td><td class="art"><span class="mono">${esc(a.codigo)}</span> · ${esc(nombreArt(a))}</td><td class="mono">${esc(p.ubic)}</td>
+      <td class="num">${cant(cantDe(p), p.un)}</td>
+      <td style="min-width:150px"><div style="display:flex;gap:6px;align-items:center"><input data-ajl="${i}" inputmode="decimal" value="${esc(l.cant)}" placeholder="${sal ? "A restar" : "A sumar"}" aria-label="Cantidad de ${p.codigo}"><span class="note">${UN[p.un].corto}</span>
+        ${sal ? `<button type="button" class="btn small" data-act="aj-todo" data-row="${i}" title="Restar el rollo completo">Todo</button>` : ""}</div></td>
+      <td class="num ${queda !== null && queda < 0 ? "neg" : ""}" id="aj-queda-${i}">${queda === null ? "" : queda < 0 ? "No alcanza" : queda === 0 ? "Agotado" : cant(queda, p.un)}</td>
+      <td><button type="button" class="btn small" data-act="aj-quitar" data-row="${i}">Quitar</button></td></tr>` }).join("");
+  return `<section class="card"><h2>Nuevo ${T[0].toLowerCase()}</h2>
+    <p class="sub">${sal ? "Resta de los rollos lo que se perdió, se dañó o salió sin venta. Un rollo que llega a cero queda agotado; su código no se borra ni se reutiliza." : "Suma a un rollo lo que falta registrado, o crea un rollo nuevo con su código y su etiqueta."} Nada cambia hasta que lo apruebe un gerente.</p>
+    <form class="form" id="aj-form">
+      <div class="row2">
+        <div class="field"><label for="aj-motivo">Motivo</label><select id="aj-motivo" data-aj="motivo"><option value="">Elige el motivo</option>${D.motivos[f.tipo].map(m => `<option ${m === f.motivo ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></div>
+        <div class="field"><label for="aj-nota">Detalle (opcional)</label><input id="aj-nota" data-aj="nota" value="${esc(f.nota)}" placeholder="${sal ? "Ej. mojado por filtración en el pasillo 1" : "Ej. encontrado en el conteo del rack 2"}" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="aj-rollo">${sal ? "Rollo" : "Sumar a un rollo existente"}</label>
+        <div class="scan"><input id="aj-rollo" class="big" value="${esc(f.rollo)}" placeholder="Escanea el rollo" autocomplete="off" style="text-transform:uppercase"><button type="button" class="btn" data-act="aj-agregar">Agregar</button></div></div>
+      ${sal ? "" : `<fieldset class="field" style="border:0;padding:0;margin:0"><span class="lbl">O crear un rollo nuevo</span>
+        <div class="row2">
+          <select data-ajn="art" aria-label="Artículo del rollo nuevo">${opcionesArticulo(f.nuevo.art)}</select>
+          <input data-ajn="cant" inputmode="decimal" value="${esc(f.nuevo.cant)}" placeholder="Cantidad${art(f.nuevo.art) ? ` en ${UN[art(f.nuevo.art).un].corto}` : ""}" aria-label="Cantidad del rollo nuevo">
+          <input data-ajn="anaquel" list="lista-anaqueles-aj" value="${esc(f.nuevo.anaquel)}" placeholder="Anaquel, ej. P01-R01-A01" style="text-transform:uppercase" aria-label="Anaquel del rollo nuevo" autocomplete="off">
+          <datalist id="lista-anaqueles-aj">${ubisActivas("anaquel").map(x => `<option value="${esc(x.codigo)}">${esc(nombreUbi(x))}</option>`).join("")}</datalist>
+          <button type="button" class="btn" data-act="aj-nuevo">Agregar rollo nuevo</button>
+        </div></fieldset>`}
+      ${f.lineas.length ? `<div class="tablewrap"><table>
+        <thead><tr><th>Rollo</th><th>Artículo</th><th>Anaquel</th><th class="num">Tiene</th><th>${sal ? "Restar" : "Sumar"}</th><th class="num">Queda</th><th></th></tr></thead>
+        <tbody>${filas}</tbody></table></div>` : ""}
+      <div class="form-foot"><span class="note">${f.lineas.length} ${f.lineas.length === 1 ? "rollo" : "rollos"} en este ajuste</span>
+        <div class="acts-row"><button type="button" class="btn" data-act="aj-cancelar">Cancelar</button><button type="button" class="btn primary" data-act="aj-guardar">Enviar a aprobación</button></div></div>
+    </form></section>`;
+}
+function totalAjuste(aj) {
+  const t = {}; aj.lineas.forEach(l => { const un = art(l.art).un; t[un] = r2((t[un] || 0) + l.cant) });
+  return Object.keys(t).map(u => `${TIPO_AJ[aj.tipo][2]} ${cant(t[u], u)}`).join(" · ");
+}
+function tarjetaAjuste(aj) {
+  const aprobar = aj.estado === "pendiente" && puede("ajuste.aprobar"), propio = aj.por === S.user, k = `aj-${aj.id}`, ver = aj.estado === "pendiente" || abierto(k);
+  const sinImprimir = aj.creados.filter(c => !D.piezas.find(p => p.codigo === c).impresiones).length;
+  return `<section class="card" id="aj-card-${aj.id}">
+    <div class="grupo-head">${plegable(k, `${aj.numero} · ${TIPO_AJ[aj.tipo][0]}`, `${esc(aj.motivo)} · ${aj.lineas.length} ${aj.lineas.length === 1 ? "rollo" : "rollos"} · ${totalAjuste(aj)} · ${aj.hora} · ${quien(aj.por)}`, true, aj.estado === "pendiente")}
+      <div class="counts"><span class="pill ${EST_AJ[aj.estado][1]}">${EST_AJ[aj.estado][0]}</span></div></div>
+    ${ver ? `${aj.nota ? `<p style="margin:8px 0 0">${esc(aj.nota)}</p>` : ""}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Rollo</th><th>Artículo</th><th>Anaquel</th><th class="num">${aj.tipo === "salida" ? "Resta" : "Suma"}</th>${aj.estado === "pendiente" ? `<th class="num">Tiene hoy</th>` : ""}</tr></thead>
+      <tbody>${aj.lineas.map(l => { const a = art(l.art), p = l.cod && D.piezas.find(x => x.codigo === l.cod); return `<tr>
+        <td class="mono">${p ? `<button class="link mono" data-act="ficha" data-cod="${p.codigo}">${p.codigo}</button>` : `<span class="pill s-info plain">Rollo nuevo</span>`}</td>
+        <td class="art"><span class="mono">${esc(a.codigo)}</span> · ${esc(nombreArt(a))}</td><td class="mono">${esc(l.anaquel || p?.ubic || "")}</td>
+        <td class="num">${TIPO_AJ[aj.tipo][2]} ${cant(l.cant, a.un)}</td>${aj.estado === "pendiente" ? `<td class="num">${p ? cant(cantDe(p), p.un) : "—"}</td>` : ""}</tr>` }).join("")}</tbody></table></div>
+    ${aj.decision ? `<p class="banner ${aj.estado === "aprobado" ? "ok" : "bad"}" style="margin-top:12px">${aj.estado === "aprobado" ? "Aprobado" : "Rechazado"} por ${quien(aj.decision.por)} el ${aj.decision.hora}${aj.decision.motivo ? `: ${esc(aj.decision.motivo)}` : "."}</p>` : ""}
+    ${aj.estado === "pendiente" ? aprobar && !propio ? `<div class="form-foot" style="margin-top:12px">
+        <input data-rech="${aj.id}" value="${esc((S.rech || {})[aj.id] || "")}" placeholder="Si lo rechazas, escribe por qué" aria-label="Motivo del rechazo de ${aj.numero}" style="flex:1 1 240px;min-width:0">
+        <div class="acts-row"><button class="btn danger" data-act="aj-rechazar" data-id="${aj.id}">Rechazar</button><button class="btn primary" data-act="aj-aprobar" data-id="${aj.id}">Aprobar ajuste</button></div></div>`
+      : `<p class="note" style="margin:12px 0 0">${propio && aprobar ? "Lo registraste tú: debe aprobarlo otro gerente." : "Espera la aprobación de un gerente. Las existencias todavía no cambian."}</p>` : ""}` : ""}
+    ${sinImprimir && puede("etiqueta.imprimir") ? `<div class="form-foot" style="margin-top:12px"><span class="note">${sinImprimir} ${sinImprimir === 1 ? "etiqueta" : "etiquetas"} de rollo nuevo sin imprimir</span><button class="btn primary" data-act="aj-imprimir" data-id="${aj.id}">Imprimir ${sinImprimir === 1 ? "la etiqueta" : `${sinImprimir} etiquetas`}</button></div>` : ""}
+  </section>`;
+}
+function vistaAjustes() {
+  const crear = puede("ajuste.crear"), pend = D.ajustes.filter(x => x.estado === "pendiente"), hechos = D.ajustes.filter(x => x.estado !== "pendiente");
+  const hayRollos = D.piezas.some(p => p.estado === "disponible");
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 7 · Inventario</div><h1>Ajustes de inventario</h1>
+      <p>Lo que se suma o se resta fuera de una compra o una venta: sobrantes, faltantes, daños o mermas. Cada ajuste lleva su número, su motivo y la aprobación de un gerente.</p></div>
+    <div class="counts">${crear && !S.ajForm ? `<button class="btn" data-act="aj-abrir" data-tipo="entrada">Ajuste de entrada</button><button class="btn" data-act="aj-abrir" data-tipo="salida" ${hayRollos ? "" : "disabled title=\"No hay rollos en anaqueles\""}>Ajuste de salida</button>` : !crear ? `<span class="note">${u().nombre} no registra ajustes.</span>` : ""}</div>
+  </section>
+  ${S.ajForm ? formAjuste() : ""}
+  ${pend.length ? `<h2 class="sec-t">Por aprobar (${pend.length})</h2>${pend.slice().reverse().map(tarjetaAjuste).join("")}` : ""}
+  ${hechos.length ? `<h2 class="sec-t">Historial</h2>${hechos.slice().reverse().map(tarjetaAjuste).join("")}` : ""}
+  ${!D.ajustes.length && !S.ajForm ? `<section class="card empty"><h2>Todavía no hay ajustes</h2><p>Cuando aparezca un sobrante o se dañe un rollo, regístralo aquí con su motivo. Las existencias cambian solo cuando un gerente lo aprueba.</p></section>` : ""}
+  ${puede("ajuste.motivos") ? `<section class="card"><h2>Motivos de ajuste</h2><p class="sub">La lista que aparece al registrar un ajuste. Solo el administrador la amplía; un motivo usado no se borra.</p>
+    <div style="display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${["entrada", "salida"].map(t => `<div><b>${TIPO_AJ[t][0]}</b><p class="note" style="margin:4px 0 8px">${D.motivos[t].map(esc).join(" · ")}</p>
+      <div class="scan"><input data-motivo="${t}" value="${esc((S.motivoNuevo || {})[t] || "")}" placeholder="Nuevo motivo" aria-label="Nuevo motivo de ${TIPO_AJ[t][0].toLowerCase()}" autocomplete="off" style="font-family:var(--f-body)"><button class="btn small" data-act="aj-motivo" data-tipo="${t}">Agregar</button></div></div>`).join("")}</div></section>` : ""}`;
+}
+
 // ---------------------------------------------------------------- Dibujo y eventos
 const $app = document.getElementById("app"), $modal = document.getElementById("modal"), $toast = document.getElementById("toast"), $tabs = document.getElementById("tabs");
 let toastTimer;
@@ -1631,9 +1821,9 @@ function toast(msg, error) {
 }
 function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
 function render() {
-  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length], ["existencias", "6", "Existencias", D.piezas.filter(p => p.estado === "disponible").length]];
+  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length], ["existencias", "6", "Existencias", D.piezas.filter(p => p.estado === "disponible").length], ["ajustes", "7", "Ajustes", D.ajustes.length]];
   $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
-  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, ajustes: vistaAjustes, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
   $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
   $modal.innerHTML = modal();
 }
@@ -1666,6 +1856,17 @@ document.addEventListener("click", e => {
     case "ed-var": { const a = art(el.dataset.id); S.modal = { tipo: "ed-var", id: a.id, color: a.color }; render(); return document.getElementById("em-var")?.select() }
     case "em-set": S.modal[el.dataset.k] = el.dataset.v; return render();
     case "em-ok": { const m = S.modal; return hacer(() => { const msg = m.tipo === "ed-linea" ? ACC_EDIT.linea(m.viejo, m.linea) : m.tipo === "ed-cat" ? ACC_EDIT.categoria(m.tela, m) : ACC_EDIT.variante(art(m.id), m.color); S.modal = null; return msg }) }
+    case "aj-abrir": abrirFormAjuste(el.dataset.tipo); render(); document.getElementById(el.dataset.tipo === "salida" ? "aj-rollo" : "aj-motivo")?.focus(); return;
+    case "aj-agregar": { hacer(ACC_AJ.agregarRollo); const i = document.getElementById("aj-rollo"); i?.focus(); i?.select(); return }
+    case "aj-nuevo": hacer(ACC_AJ.agregarNuevo); return document.querySelector('[data-ajn="cant"]')?.focus();
+    case "aj-quitar": S.ajForm.lineas.splice(+el.dataset.row, 1); return render();
+    case "aj-todo": { const l = S.ajForm.lineas[+el.dataset.row]; l.cant = n2(cantDe(D.piezas.find(x => x.codigo === l.cod))).replace(/\./g, ""); return render() }
+    case "aj-cancelar": S.ajForm = null; return render();
+    case "aj-guardar": return hacer(ACC_AJ.guardar);
+    case "aj-aprobar": return hacer(() => ACC_AJ.aprobar(D.ajustes.find(x => x.id === el.dataset.id)));
+    case "aj-rechazar": return hacer(() => ACC_AJ.rechazar(D.ajustes.find(x => x.id === el.dataset.id), (S.rech || {})[el.dataset.id]));
+    case "aj-imprimir": return hacer(() => ACC_AJ.imprimir(D.ajustes.find(x => x.id === el.dataset.id)));
+    case "aj-motivo": return hacer(() => ACC_AJ.motivo(el.dataset.tipo, (S.motivoNuevo || {})[el.dataset.tipo]));
     case "ex-buscar-limpiar": S.buscarEx = ""; render(); document.getElementById("ex-buscar")?.focus(); return;
     case "ex-modo": S.exModo = el.dataset.m; return render();
     case "ex-todos": S.exTodos = !S.exTodos; return render();
@@ -1724,6 +1925,9 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && S.modal) { S.modal = null; render() }
+  else if (e.key === "Enter" && e.target.id === "aj-rollo") { e.preventDefault(); hacer(ACC_AJ.agregarRollo); const i = document.getElementById("aj-rollo"); i?.focus(); i?.select() }
+  else if (e.key === "Enter" && e.target.dataset?.ajn && e.target.tagName === "INPUT") { e.preventDefault(); hacer(ACC_AJ.agregarNuevo); document.querySelector('[data-ajn="cant"]')?.focus() }
+  else if (e.key === "Enter" && e.target.dataset?.motivo) { e.preventDefault(); const t = e.target.dataset.motivo; hacer(() => ACC_AJ.motivo(t, (S.motivoNuevo || {})[t])); document.querySelector(`[data-motivo="${t}"]`)?.focus() }
   else if (e.key === "Escape" && e.target.id === "ex-buscar" && S.buscarEx) { S.buscarEx = ""; render(); document.getElementById("ex-buscar")?.focus() }
   else if (e.key === "Escape" && e.target.id === "art-buscar" && S.buscarArt) { S.buscarArt = ""; render(); document.getElementById("art-buscar")?.focus() }
   if (e.key === "Enter" && e.target.dataset?.em !== undefined) { e.preventDefault(); document.querySelector('[data-act="em-ok"]')?.click() }
@@ -1746,6 +1950,13 @@ document.addEventListener("input", e => {
   }
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
   if (ds.em) { S.modal[ds.em] = t.value; return }
+  if (ds.aj) { S.ajForm[ds.aj] = t.value; return }
+  if (t.id === "aj-rollo") { S.ajForm.rollo = t.value; return }
+  if (ds.ajn) { S.ajForm.nuevo[ds.ajn] = t.value; if (ds.ajn === "art") { render(); document.querySelector('[data-ajn="cant"]')?.focus() } return }
+  if (ds.rech) { (S.rech ||= {})[ds.rech] = t.value; return }
+  if (ds.motivo) { (S.motivoNuevo ||= {})[ds.motivo] = t.value; return }
+  if (ds.ajl !== undefined) { const l = S.ajForm.lineas[+ds.ajl]; l.cant = t.value; const p = D.piezas.find(x => x.codigo === l.cod), c = decimal(t.value), q = document.getElementById(`aj-queda-${ds.ajl}`);
+    if (q) { const v = c > 0 ? r2(S.ajForm.tipo === "salida" ? cantDe(p) - c : cantDe(p) + c) : null; q.textContent = v === null ? "" : v < 0 ? "No alcanza" : v === 0 ? "Agotado" : cant(v, p.un); q.className = `num ${v !== null && v < 0 ? "neg" : ""}` } return }
   if (t.id === "ex-buscar") { S.buscarEx = t.value; const pos = t.selectionStart; render(); const i = document.getElementById("ex-buscar"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos) } catch (x) {} } return }
   if (t.id === "art-buscar") { S.buscarArt = t.value; const pos = t.selectionStart; render(); const i = document.getElementById("art-buscar"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos) } catch (x) {} } return }
   if (ds.uf) { S.ubiForm[ds.uf] = t.value; const pv = document.getElementById("uf-prev"); if (pv) pv.textContent = previaRack(S.ubiForm); return }
@@ -1776,6 +1987,7 @@ document.addEventListener("submit", e => {
   const id = e.target.id;
   if (id === "art-form") return hacer(ACC_ART.guardar);
   if (id === "prov-form") return hacer(ACC_PROV.guardar);
+  if (id === "aj-form") return;
   if (id === "ex-buscar-form") { const i = document.getElementById("ex-buscar"); S.buscarEx = i.value; render();
     const hit = document.getElementById("ex-hit"); if (hit) hit.scrollIntoView({ block: "center" });
     const j = document.getElementById("ex-buscar"); j?.focus(); j?.select(); return }
