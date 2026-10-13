@@ -1,8 +1,17 @@
 # Avance de la Fase 3 (diseño)
 
-Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 18). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+Corte del 13/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 19). Su fuente es `prototipo-recepcion.html` en esta carpeta.
 
 Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
+
+## Estructura del sistema (versión 19)
+
+El prototipo abre en el **Mapa del sistema**: los 10 módulos acordados con sus 47 procesos. Cada proceso dice si ya está listo para probar o en qué etapa se construye.
+
+- Menú de módulos arriba: Administración, Catálogos, Compras, Inventario, Ventas, Cuentas por cobrar, Cuentas por pagar, Bancos y caja, Contabilidad y Reportes.
+- Al elegir un módulo aparecen sus procesos como pestañas. Los que faltan muestran su etapa y una página que explica qué harán.
+- Administración ya muestra los almacenes y la matriz de permisos por persona.
+- Etapas: 1 Inventario completo (en curso), 2 Ventas, 3 Compras completo y cuentas por pagar, 4 Cuentas por cobrar, 5 Bancos y caja, 6 Reportes y cierre contable.
 
 ## Flujo acordado
 

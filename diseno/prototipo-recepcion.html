@@ -57,6 +57,19 @@ h1, h2, h3 { text-wrap: balance; margin: 0 }
 .tabs { max-width: 1180px; margin: 0 auto; padding: 8px 16px 0; display: flex; gap: 4px; overflow-x: auto }
 .tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px 9px; cursor: pointer; font-weight: 500; color: var(--muted); white-space: nowrap; display: flex; gap: 8px; align-items: center }
 .tab[aria-current="page"] { color: var(--ink); border-color: var(--accent) }
+.tab.pend { opacity: .7 }
+.tabs.sub { padding-top: 2px; border-top: 1px solid var(--line) }
+.tabs.sub .tab { font-size: 13px; padding: 7px 10px 8px }
+.tabs[hidden] { display: none }
+.mapa { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); align-items: start }
+.mapa .card { margin: 0 }
+.mapa .grupo-head { flex-wrap: nowrap; align-items: flex-start }
+.procs { list-style: none; margin: 10px 0 0; padding: 0 }
+.procs li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line) }
+.link.quiet { color: var(--muted) }
+.link.plain { color: inherit; text-decoration: none; font: inherit }
+.permisos tr.grupo td { background: var(--surface-2); padding-top: 10px }
+.permisos .si { color: var(--ok); font-weight: 700 }
 .tab .n { font-size: 11px; background: var(--surface-2); border-radius: 99px; padding: 0 7px; color: var(--muted) }
 .tab .step { font: 600 11px/1 var(--f-mono); color: var(--muted) }
 
@@ -247,6 +260,7 @@ tr.sub > td { background: var(--surface-2, transparent); padding-top: 0 }
     </label>
   </div>
   <nav class="tabs" id="tabs" aria-label="Módulos"></nav>
+  <nav class="tabs sub" id="subtabs" aria-label="Procesos del módulo"></nav>
 </header>
 
 <main id="app"></main>
@@ -304,7 +318,7 @@ const EVENTO = {
 // ---------------------------------------------------------------- Estado (solo en este navegador)
 const CLAVE = "telas-prototipo-v2";
 const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], ajustes: [], motivos: null, traslados: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0, aje: 0, ajs: 0, tra: 0 } };
-const S = { traRec: { anaquel: "", rollo: "" }, user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
+const S = { traRec: { anaquel: "", rollo: "" }, user: "admin", view: "inicio", rec: null, pieza: null, modal: null,
             artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null,
             form: { art: "", peso: "", fab: "" }, ubi: { anaquel: "", rollo: "" }, motivo: "", sel: {} };
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
@@ -1970,8 +1984,131 @@ function vistaTraslados() {
   ${!D.traslados.length && !S.traForm ? `<section class="card empty"><h2>Todavía no hay traslados</h2><p>Cuando el ${esc(ALMACENES[1].nombre)} necesite mercancía, registra aquí los rollos que salen del ${esc(ALMACENES[0].nombre)}.</p></section>` : ""}`;
 }
 
+// ---------------------------------------------------------------- Estructura: módulos y procesos (mapa acordado el 13/10/2026)
+// Cada proceso es una vista del prototipo (v) o queda "por construir" en su etapa. Los módulos van en el orden del mapa.
+const ETAPAS = { 1: "Inventario completo", 2: "Ventas", 3: "Compras completo y cuentas por pagar", 4: "Cuentas por cobrar", 5: "Bancos y caja", 6: "Reportes y cierre contable" };
+const MODULOS = [
+  { id: "admin", nombre: "Administración", para: "Configurar la empresa y quién hace qué", procesos: [
+    { v: "almacenes", nombre: "Empresas, sucursales y almacenes" },
+    { v: "usuarios", nombre: "Usuarios, roles y permisos" },
+    { id: "tasa", nombre: "Tasa BCV del día", etapa: 2, desc: "La tasa oficial de cada día. Cada documento guarda la tasa de su fecha: todo se registra en bolívares y se muestra también en dólares." },
+    { id: "numeracion", nombre: "Numeración de documentos", etapa: 1, desc: "Los prefijos y contadores de cada documento (OC, REC, AJE, AJS, TRA). Un número usado nunca se reutiliza." },
+    { id: "bitacora", nombre: "Bitácora de cambios", etapa: 1, desc: "Quién cambió qué y cuándo en catálogos, permisos y configuración." } ] },
+  { id: "catalogos", nombre: "Catálogos", para: "Los datos que todos los módulos usan", procesos: [
+    { v: "articulos", nombre: "Artículos" }, { v: "proveedores", nombre: "Proveedores" }, { v: "ubicaciones", nombre: "Ubicaciones" },
+    { id: "clientes", nombre: "Clientes", etapa: 2, desc: "Datos fiscales y de contacto, límite y días de crédito de cada cliente." } ] },
+  { id: "compras", nombre: "Compras", para: "Lo que se pide y se le debe al proveedor", procesos: [
+    { v: "compras", nombre: "Órdenes de compra" },
+    { id: "fact-prov", nombre: "Factura del proveedor", etapa: 3, desc: "La factura del contenedor, contra la orden y la recepción. Genera la cuenta por pagar." },
+    { id: "gastos-imp", nombre: "Gastos de importación", etapa: 3, desc: "Flete, seguro, aduana y nacionalización. Se reparten sobre los artículos para obtener su costo en dólares y en bolívares." },
+    { id: "dev-prov", nombre: "Devolución al proveedor", etapa: 3, desc: "Rollos que vuelven al proveedor, con su nota de crédito." } ] },
+  { id: "inventario", nombre: "Inventario", para: "Cuánto hay, dónde y por qué cambió", procesos: [
+    { v: "recepciones", nombre: "Recepciones" }, { v: "existencias", nombre: "Existencias" }, { v: "ajustes", nombre: "Ajustes" }, { v: "traslados", nombre: "Traslados" },
+    { id: "reubicacion", nombre: "Reubicación entre anaqueles", etapa: 1, desc: "Cambiar un rollo de anaquel dentro del mismo almacén escaneando el anaquel y el rollo. No cambia la cantidad." },
+    { id: "conteo", nombre: "Conteo físico", etapa: 1, desc: "Contar un anaquel, un pasillo o todo el almacén escaneando. Bloquea solo el anaquel que se cuenta; las diferencias pasan a ajustes que aprueba un gerente." },
+    { id: "kardex", nombre: "Kardex", etapa: 1, desc: "La historia de cada artículo y de cada rollo: entradas, salidas, traslados y ajustes, con el saldo después de cada movimiento." } ] },
+  { id: "ventas", nombre: "Ventas", para: "Lo que se ofrece, se aparta, se corta y se entrega", procesos: [
+    { id: "cotizacion", nombre: "Cotización", etapa: 2, desc: "Precios en dólares y en bolívares a la tasa del día, con su vigencia." },
+    { id: "pedido", nombre: "Pedido", etapa: 2, desc: "Lo que el cliente confirma. Puede apartar rollos para que nadie más los venda." },
+    { id: "corte", nombre: "Corte", etapa: 2, desc: "Cortar lo vendido escaneando el rollo. El rollo conserva su código y baja su cantidad." },
+    { id: "despacho", nombre: "Despacho", etapa: 2, desc: "Preparar y entregar el pedido escaneando cada rollo o corte." },
+    { id: "factura", nombre: "Factura", etapa: 2, desc: "La factura de venta en bolívares con su equivalente en dólares. Genera la cuenta por cobrar y su asiento." },
+    { id: "dev-cliente", nombre: "Devolución del cliente", etapa: 2, desc: "Mercancía que vuelve, con su nota de crédito. El rollo regresa al inventario." } ] },
+  { id: "cxc", nombre: "Cuentas por cobrar", para: "Lo que los clientes deben", procesos: [
+    { id: "edo-cuenta", nombre: "Estado de cuenta", etapa: 4, desc: "Facturas, abonos y saldo de cada cliente." },
+    { id: "cobros", nombre: "Cobros y abonos", etapa: 4, desc: "Lo que paga el cliente. El dinero entra en Bancos y caja." },
+    { id: "credito", nombre: "Crédito", etapa: 4, desc: "Límite y días de crédito. Avisa antes de venderle a un cliente que se pasa." },
+    { id: "antiguedad", nombre: "Antigüedad de saldos", etapa: 4, desc: "Cuánto se debe y desde cuándo: al día, 30, 60 y más de 90 días." } ] },
+  { id: "cxp", nombre: "Cuentas por pagar", para: "Lo que se les debe a los proveedores", procesos: [
+    { id: "fact-pagar", nombre: "Facturas por pagar", etapa: 3, desc: "Cada factura de proveedor con su vencimiento y su saldo." },
+    { id: "pagos", nombre: "Pagos y anticipos", etapa: 3, desc: "Lo que se le paga al proveedor. El dinero sale de Bancos y caja." },
+    { id: "vencimientos", nombre: "Vencimientos", etapa: 3, desc: "Lo que vence esta semana y este mes." } ] },
+  { id: "bancos", nombre: "Bancos y caja", para: "El dinero que entra y sale", procesos: [
+    { id: "cuentas", nombre: "Cuentas bancarias", etapa: 5, desc: "Cuentas en bolívares y en dólares, con su saldo." },
+    { id: "movimientos", nombre: "Ingresos y egresos", etapa: 5, desc: "Todo lo que entra y sale, enlazado con cobros y pagos." },
+    { id: "transferencias", nombre: "Transferencias", etapa: 5, desc: "Movimientos entre cuentas propias." },
+    { id: "conciliacion", nombre: "Conciliación bancaria", etapa: 5, desc: "Cuadrar el estado de cuenta del banco con lo registrado." },
+    { id: "caja", nombre: "Caja y cierre de caja", etapa: 5, desc: "Lo cobrado en la tienda y el cierre de cada día." } ] },
+  { id: "contabilidad", nombre: "Contabilidad", para: "Los libros de la empresa, en este mismo sistema", procesos: [
+    { id: "plan", nombre: "Plan de cuentas", etapa: 3, desc: "Las cuentas contables de la empresa." },
+    { id: "asientos", nombre: "Asientos", etapa: 3, desc: "Automáticos desde compras, ventas, inventario y bancos, y manuales cuando hagan falta. En bolívares, con su equivalente en dólares." },
+    { id: "libros", nombre: "Libro diario y mayor", etapa: 6, desc: "Todos los asientos, por fecha y por cuenta." },
+    { id: "estados", nombre: "Balance y estado de resultados", etapa: 6, desc: "Cómo está la empresa y cuánto ganó en el período." },
+    { id: "cierre", nombre: "Cierre de período", etapa: 6, desc: "Cerrar el mes: en un período cerrado ya no se modifica nada." } ] },
+  { id: "reportes", nombre: "Reportes", para: "Ver el negocio en números", procesos: [
+    { id: "tablero", nombre: "Tablero del gerente", etapa: 6, desc: "Ventas, existencias, cobros y pagos del día en una sola pantalla." },
+    { id: "rep-ventas", nombre: "Ventas por artículo y cliente", etapa: 6, desc: "Qué se vende más, a quién y a qué precio." },
+    { id: "rotacion", nombre: "Rotación de inventario", etapa: 6, desc: "Qué se mueve rápido y qué está quieto en los anaqueles." },
+    { id: "rep-tiempos", nombre: "Tiempos de recepción", etapa: 6, desc: "Cuánto tarda cada contenedor desde que se abre hasta el último rollo en su anaquel." } ] },
+];
+function claveProc(p) { return p.v || p.id }
+function moduloDe(k) { return MODULOS.find(m => m.procesos.some(p => claveProc(p) === k)) }
+function procesoActual() { return S.view === "pend" ? S.pend : modulo() }
+function contar(v) {
+  return { articulos: D.articulos.length, proveedores: D.proveedores.length, ubicaciones: D.ubicaciones.length, compras: D.ocs.length, recepciones: D.recs.length,
+           existencias: D.piezas.filter(p => p.estado === "disponible").length, ajustes: D.ajustes.length, traslados: D.traslados.length, almacenes: ALMACENES.length, usuarios: Object.keys(USERS).length }[v];
+}
+function irModulo(id) { const p = MODULOS.find(m => m.id === id).procesos[0]; return p.v ? ir(p.v) : ir("pend", { pend: p.id }) }
+function vistaInicio() {
+  const todos = MODULOS.flatMap(m => m.procesos), listos = todos.filter(p => p.v).length;
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Inicio</div><h1>Mapa del sistema</h1>
+      <p>Los ${MODULOS.length} módulos acordados y sus procesos. Lo marcado como listo ya se puede probar en este prototipo. Lo demás se construye por etapas, en este orden: ${Object.entries(ETAPAS).map(([n, e]) => `${n}. ${e}`).join(" · ")}.</p></div>
+    <div class="counts"><span class="pill s-ok">${listos} de ${todos.length} procesos listos</span></div>
+  </section>
+  ${!D.articulos.length ? `<p class="banner info">Para probar, empieza por Catálogos › <button class="link" data-act="ir" data-v="articulos">Artículos</button>, o <button class="link" data-act="ejemplo">carga un ejemplo</button>.</p>` : ""}
+  <div class="mapa">${MODULOS.map(m => { const ls = m.procesos.filter(p => p.v).length; return `
+    <section class="card mod">
+      <div class="grupo-head"><div><h2><button class="link plain" data-act="ir-mod" data-m="${m.id}">${esc(m.nombre)}</button></h2><span class="note">${esc(m.para)}</span></div>
+        <span class="pill ${ls === m.procesos.length ? "s-ok" : ls ? "s-info" : "s-off"} plain">${ls} de ${m.procesos.length}</span></div>
+      <ul class="procs">${m.procesos.map(p => p.v
+        ? `<li><button class="link" data-act="ir" data-v="${p.v}">${esc(p.nombre)}</button><span class="pill s-ok">Listo</span></li>`
+        : `<li><button class="link quiet" data-act="ir-pend" data-p="${p.id}">${esc(p.nombre)}</button><span class="note">Etapa ${p.etapa}</span></li>`).join("")}</ul>
+    </section>` }).join("")}</div>`;
+}
+function vistaPend() {
+  const m = moduloDe(S.pend), p = m.procesos.find(x => x.id === S.pend), listos = m.procesos.filter(x => x.v);
+  return `
+  <section class="page-head"><div><div class="eyebrow">${esc(m.nombre)} · por construir</div><h1>${esc(p.nombre)}</h1><p>${esc(p.desc)}</p></div></section>
+  <p class="banner info">Se construye en la <b>etapa ${p.etapa}: ${ETAPAS[p.etapa]}</b>. ${p.etapa === 1 ? "Es parte de la etapa en curso." : "Primero se termina la etapa en curso, Inventario completo."}</p>
+  ${listos.length ? `<section class="card"><h2>Ya puedes probar en ${esc(m.nombre)}</h2><div class="acts-row">${listos.map(x => `<button class="btn" data-act="ir" data-v="${x.v}">${esc(x.nombre)}</button>`).join("")}</div></section>` : ""}
+  <div><button class="link" data-act="ir" data-v="inicio">← Mapa del sistema</button></div>`;
+}
+// ---------------------------------------------------------------- Administración (en el prototipo, solo de consulta)
+function vistaAlmacenes() {
+  return `
+  <section class="page-head"><div><div class="eyebrow">Administración</div><h1>Empresas, sucursales y almacenes</h1>
+    <p>Una empresa con dos almacenes. En el sistema real aquí se agregan empresas, sucursales y almacenes; en el prototipo son fijos.</p></div></section>
+  <section class="card"><div class="tablewrap"><table>
+    <thead><tr><th>Almacén</th><th>Código de sus anaqueles</th><th class="num">Muelles</th><th class="num">Anaqueles</th><th class="num">Rollos disponibles</th><th class="num">Cantidad disponible</th></tr></thead>
+    <tbody>${ALMACENES.map(a => { const ps = D.piezas.filter(p => p.estado === "disponible" && almDe(p.ubic) === a.id); return `<tr>
+      <td><b>${esc(a.nombre)}</b></td><td class="mono">${codigoAnaquel(1, 1, 1, a.id)}</td>
+      <td class="num">${D.ubicaciones.filter(x => x.alm === a.id && x.tipo === "muelle").length}</td><td class="num">${D.ubicaciones.filter(x => x.alm === a.id && x.tipo === "anaquel").length}</td>
+      <td class="num">${ps.length}</td><td class="num">${ps.length ? sumaPorUnidad(ps) : "—"}</td></tr>` }).join("")}</tbody></table></div></section>`;
+}
+const PERMISOS = [
+  ["Catálogos", [["catalogo.ver", "Ver catálogos"], ["catalogo.editar", "Crear y editar artículos, proveedores y ubicaciones"]]],
+  ["Compras", [["compra.crear", "Registrar órdenes de compra"]]],
+  ["Recepción", [["recepcion.ver", "Ver recepciones"], ["recepcion.crear", "Abrir una recepción"], ["recepcion.registrar_pieza", "Registrar rollos"], ["recepcion.verificar", "Verificar y enviar al gerente"],
+    ["recepcion.aprobar", "Aprobar la recepción"], ["recepcion.anular", "Anular rollos o recepciones"], ["pieza.resolver_incidencia", "Resolver incidencias"], ["pieza.liberar", "Liberar de cuarentena"],
+    ["pieza.ubicar", "Trasladar rollos del muelle a sus anaqueles"], ["etiqueta.imprimir", "Imprimir etiquetas"]]],
+  ["Ajustes", [["ajuste.crear", "Registrar ajustes"], ["ajuste.aprobar", "Aprobar o rechazar ajustes"], ["ajuste.motivos", "Agregar motivos de ajuste"]]],
+  ["Traslados", [["traslado.crear", "Registrar traslados"], ["traslado.aprobar", "Aprobar y despachar traslados"], ["traslado.recibir", "Recibir traslados en el destino"]]],
+];
+function vistaUsuarios() {
+  const us = Object.keys(USERS);
+  return `
+  <section class="page-head"><div><div class="eyebrow">Administración</div><h1>Usuarios, roles y permisos</h1>
+    <p>Qué puede hacer cada persona. Regla fija: quien registra un ajuste o un traslado no lo aprueba. En el sistema real cada persona entra con su usuario; aquí se cambia con “Viendo como”.</p></div></section>
+  <section class="card"><div class="tablewrap"><table class="permisos">
+    <thead><tr><th>Permiso</th>${us.map(k => `<th class="num">${esc(USERS[k].nombre)}<br><span class="note">${esc(USERS[k].rol)}</span></th>`).join("")}</tr></thead>
+    <tbody>${PERMISOS.map(([g, ps]) => `<tr class="grupo"><td colspan="${us.length + 1}"><b>${g}</b></td></tr>${ps.map(([k, n]) => `<tr><td>${n}</td>${us.map(x => `<td class="num">${USERS[x].permisos.includes(k) ? `<span class="si" aria-label="Sí">✓</span>` : `<span class="note" aria-label="No">—</span>`}</td>`).join("")}</tr>`).join("")}`).join("")}</tbody>
+  </table></div></section>`;
+}
+
 // ---------------------------------------------------------------- Dibujo y eventos
-const $app = document.getElementById("app"), $modal = document.getElementById("modal"), $toast = document.getElementById("toast"), $tabs = document.getElementById("tabs");
+const $app = document.getElementById("app"), $modal = document.getElementById("modal"), $toast = document.getElementById("toast"), $tabs = document.getElementById("tabs"), $sub = document.getElementById("subtabs");
 let toastTimer;
 function toast(msg, error) {
   $toast.innerHTML = `<div class="toast ${error ? "error" : ""}" role="status">${esc(msg)}</div>`;
@@ -1979,9 +2116,14 @@ function toast(msg, error) {
 }
 function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
 function render() {
-  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length], ["existencias", "6", "Existencias", D.piezas.filter(p => p.estado === "disponible").length], ["ajustes", "7", "Ajustes", D.ajustes.length], ["traslados", "8", "Traslados", D.traslados.length]];
-  $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
-  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, ajustes: vistaAjustes, traslados: vistaTraslados, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  const actual = procesoActual(), m = S.view === "inicio" ? null : moduloDe(actual), cur = 'aria-current="page"';
+  $tabs.innerHTML = `<button class="tab" data-act="ir" data-v="inicio" ${m ? "" : cur}>Inicio</button>` + MODULOS.map(x => { const ls = x.procesos.filter(p => p.v).length;
+    return `<button class="tab${ls ? "" : " pend"}" data-act="ir-mod" data-m="${x.id}" ${x === m ? cur : ""} title="${ls} de ${x.procesos.length} procesos listos">${x.nombre}</button>` }).join("");
+  $sub.hidden = !m;
+  $sub.innerHTML = m ? m.procesos.map(p => p.v
+    ? `<button class="tab" data-act="ir" data-v="${p.v}" ${actual === p.v ? cur : ""}>${p.nombre}<span class="n">${contar(p.v)}</span></button>`
+    : `<button class="tab pend" data-act="ir-pend" data-p="${p.id}" ${actual === p.id ? cur : ""}>${p.nombre}<span class="n">Etapa ${p.etapa}</span></button>`).join("") : "";
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, ajustes: vistaAjustes, inicio: vistaInicio, pend: vistaPend, almacenes: vistaAlmacenes, usuarios: vistaUsuarios, traslados: vistaTraslados, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
   $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
   $modal.innerHTML = modal();
 }
@@ -2014,6 +2156,8 @@ document.addEventListener("click", e => {
     case "ed-var": { const a = art(el.dataset.id); S.modal = { tipo: "ed-var", id: a.id, color: a.color }; render(); return document.getElementById("em-var")?.select() }
     case "em-set": S.modal[el.dataset.k] = el.dataset.v; return render();
     case "em-ok": { const m = S.modal; return hacer(() => { const msg = m.tipo === "ed-linea" ? ACC_EDIT.linea(m.viejo, m.linea) : m.tipo === "ed-cat" ? ACC_EDIT.categoria(m.tela, m) : ACC_EDIT.variante(art(m.id), m.color); S.modal = null; return msg }) }
+    case "ir-mod": return irModulo(el.dataset.m);
+    case "ir-pend": return ir("pend", { pend: el.dataset.p });
     case "ubi-alm": S.almUbi = el.dataset.a; S.ubiForm = null; return render();
     case "ex-alm": S.exAlm = el.dataset.a; return render();
     case "tra-nuevo": abrirFormTraslado(); render(); return document.getElementById("tf-rollo")?.focus();
@@ -2193,6 +2337,5 @@ document.addEventListener("submit", e => {
 
 document.getElementById("user").innerHTML = Object.entries(USERS).map(([k, v]) => `<option value="${k}">${v.nombre} · ${v.rol}</option>`).join("");
 cargar();
-if (D.recs.length) S.view = "recepciones";
 render();
 </script>
