@@ -200,6 +200,12 @@ tr.off td { color: var(--muted) }
 
 tr.hit td { background: var(--accent-soft) }
 #art-buscar, #ex-buscar { padding: 10px 14px; font-family: var(--f-body) }
+.exist { background: none; border: 0; padding: 2px 0; cursor: pointer; text-align: right; display: inline-flex; flex-direction: column; align-items: flex-end; color: inherit; font: inherit }
+.exist b { font-weight: 700; font-size: 15px }
+.exist:hover b { color: var(--accent) }
+.exist .chev { display: inline-block; transition: transform .15s }
+.exist[aria-expanded="true"] .chev { transform: rotate(90deg) }
+.anaq-tabla { margin: 4px 0 8px; max-width: 560px }
 tr.sub > td { background: var(--surface-2, transparent); padding-top: 0 }
 .rollos-lista { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 8px }
 .rollo-chip { border: 1px solid var(--line); border-radius: var(--r); padding: 4px 10px; background: var(--surface); cursor: pointer; font-size: 13px; text-align: left }
@@ -314,7 +320,8 @@ function dur(ms) {
   if (h < 24) return `${h} h ${m % 60} min`;
   return `${d} d ${h % 24} h`;
 }
-function n2(n) { return Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+// 1.000,00: punto para miles (también en cifras de 4 dígitos) y coma decimal, siempre 2 decimales.
+function n2(n) { const [e, d] = Math.abs(Number(n)).toFixed(2).split("."); return `${Math.round(Number(n) * 100) < 0 ? "-" : ""}${e.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${d}` }
 function cant(n, un) { return `${n2(n)} ${UN[un].corto}` }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]) }
 function u() { return USERS[S.user] }
@@ -561,8 +568,9 @@ function vistaArticulos() {
   const q = S.buscarArt || "", res = buscarArticulos(q);
   res.lista.forEach(a => ((lineas[lineaDe(a)] ||= {})[a.tela] ||= []).push(a));
   const orden = (x, y) => x.localeCompare(y, "es");
-  const disp = xs => xs.reduce((n, a) => n + D.piezas.filter(p => p.art === a.id && p.estado === "disponible").length, 0);
-  const rollos = n => `${n} ${n === 1 ? "rollo disponible" : "rollos disponibles"}`;
+  // Existencia = rollos ya ubicados en su anaquel. Kilos y metros nunca se suman entre sí.
+  const dispDe = xs => { const ids = new Set(xs.map(a => a.id)); return D.piezas.filter(p => ids.has(p.art) && p.estado === "disponible") };
+  const existencia = xs => { const ps = dispDe(xs); return ps.length ? `${sumaPorUnidad(ps)} disponibles en ${ps.length} ${ps.length === 1 ? "rollo" : "rollos"}` : "sin existencia" };
   return `
   <section class="page-head">
     <div><div class="eyebrow">Paso 1 · Catálogo</div><h1>Artículos</h1>
@@ -582,21 +590,28 @@ function vistaArticulos() {
   ${D.articulos.length && !q ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-scope="art" data-abrir="0">Plegar todo</button></div>` : ""}
   ${Object.keys(lineas).sort(orden).map(l => { const cats = lineas[l], todos = Object.values(cats).flat(), kl = `linea-${todos[0].id}`; return `
   <section class="card">
-    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} ${todos.length === 1 ? "artículo" : "artículos"} · ${rollos(disp(todos))}`, false, !!q)}
+    <div class="grupo-head">${plegable(kl, esc(l), `${Object.keys(cats).length} ${Object.keys(cats).length === 1 ? "categoría" : "categorías"} · ${todos.length} ${todos.length === 1 ? "artículo" : "artículos"} · ${existencia(todos)}`, false, !!q)}
       <div class="counts">${editar && !S.artForm ? `<button class="btn small" data-act="ed-linea" data-id="${todos[0].id}">Editar</button>` : ""}</div></div>
     ${q || abierto(kl) ? `<div class="racks">${Object.keys(cats).sort(orden).map(t => { const g = cats[t], a0 = g[0], k = `tela-${a0.id}`, V = POR[a0.por || "color"], activos = g.filter(a => a.activo).length;
-      const resumen = [`${g.length} ${g.length === 1 ? V[0].toLowerCase() : V[1]}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, `por ${UN[a0.un].nombre.toLowerCase()}`, a0.ancho ? `${String(a0.ancho).replace(".", ",")} cm` : "", a0.comp ? esc(a0.comp) : "", rollos(disp(g))].filter(Boolean).join(" · ");
+      const resumen = [`${g.length} ${g.length === 1 ? V[0].toLowerCase() : V[1]}${activos < g.length ? ` (${g.length - activos} inactivo${g.length - activos > 1 ? "s" : ""})` : ""}`, a0.ancho ? `${String(a0.ancho).replace(".", ",")} cm` : "", a0.comp ? esc(a0.comp) : "", existencia(g)].filter(Boolean).join(" · ");
       return `<div class="rack">
       <div class="form-foot">${plegable(k, esc(a0.categoria || t), a0.categoria ? resumen : `${resumen} · sin categoría: usa Editar`, true, !!q)}
         ${editar && !S.artForm ? `<div class="acts-row"><button class="btn small" data-act="ed-cat" data-id="${a0.id}">Editar</button><button class="btn small" data-act="art-mas" data-id="${a0.id}">Agregar ${V[1]}</button></div>` : ""}</div>
       ${q || abierto(k) ? `<div class="tablewrap"><table>
-        <thead><tr><th>${V[0]}</th><th>Código</th><th>Abreviatura</th><th>Unidad</th><th class="num">Tope por rollo</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${g.map(a => `<tr class="${a.activo ? "" : "off"}${res.exacto === a.id ? " hit" : ""}" ${res.exacto === a.id ? 'id="art-hit"' : ""}>
-          <td>${esc(a.color)}</td><td class="mono">${esc(a.codigo)}</td>
-          <td class="mono">${a.abr}${a.usada ? ` <span class="lock" title="Ya hay rollos con esta abreviatura">· fija</span>` : ""}</td>
-          <td>${UN[a.un].nombre}</td><td class="num">${cant(a.tope, a.un)}</td>
+        <thead><tr><th>Código</th><th>${V[0]}</th><th class="num">Existencia</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${g.map(a => { const ps = dispDe([a]), proc = D.piezas.filter(p => p.art === a.id && EN_PROCESO.includes(p.estado)), ke = `exa-${a.id}`, ver = ps.length > 0 && abierto(ke);
+          const anaq = {}; ps.forEach(p => (anaq[p.ubic] ||= []).push(p));
+          return `<tr class="${a.activo ? "" : "off"}${res.exacto === a.id ? " hit" : ""}" ${res.exacto === a.id ? 'id="art-hit"' : ""}>
+          <td class="mono">${esc(a.codigo)}</td><td>${esc(a.color)}</td>
+          <td class="num">${ps.length ? `<button class="exist" data-act="fold" data-k="${ke}" aria-expanded="${ver}" title="Ver en qué anaqueles está">
+              <b>${sumaPorUnidad(ps)}</b><span class="note">${ps.length} ${ps.length === 1 ? "rollo" : "rollos"} · ${Object.keys(anaq).length} ${Object.keys(anaq).length === 1 ? "anaquel" : "anaqueles"} <span class="chev" aria-hidden="true">▸</span></span></button>`
+            : `<span class="note">Sin existencia</span>`}${proc.length ? `<span class="note" style="display:block">+ ${sumaPorUnidad(proc)} por ubicar</span>` : ""}</td>
           <td>${a.activo ? `<span class="pill s-ok">Activo</span>` : `<span class="pill s-off">Inactivo</span>`}</td>
-          <td>${editar ? `<div class="acts-row" style="flex-wrap:nowrap"><button class="btn small" data-act="ed-var" data-id="${a.id}">Editar</button><button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button></div>` : ""}</td></tr>`).join("")}
+          <td>${editar ? `<div class="acts-row" style="flex-wrap:nowrap"><button class="btn small" data-act="ed-var" data-id="${a.id}">Editar</button><button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button></div>` : ""}</td></tr>
+          ${ver ? `<tr class="sub"><td colspan="5"><table class="anaq-tabla">
+            <thead><tr><th>Anaquel</th><th>Dónde</th><th class="num">Rollos</th><th class="num">Cantidad</th></tr></thead>
+            <tbody>${Object.keys(anaq).sort().map(u => { const x = ubiPorCodigo(u); return `<tr><td class="mono">${esc(u)}</td><td class="note">${x ? esc(nombreUbi(x)) : ""}</td><td class="num">${anaq[u].length}</td><td class="num">${sumaPorUnidad(anaq[u])}</td></tr>` }).join("")}</tbody>
+            </table></td></tr>` : ""}` }).join("")}
         </tbody></table></div>` : ""}</div>` }).join("")}</div>` : ""}
   </section>` }).join("")}`;
 }

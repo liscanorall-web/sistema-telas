@@ -1,6 +1,6 @@
 # Avance de la Fase 3 (diseño)
 
-Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 15). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 16). Su fuente es `prototipo-recepcion.html` en esta carpeta.
 
 Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
 
@@ -11,6 +11,7 @@ Los datos que se cargan en el prototipo se guardan solo en el navegador de quien
    - La unidad (kilo o metro), el ancho y el tope van por categoría.
    - Línea, categoría y nombre del color o diseño se pueden editar. El código y la abreviatura no cambian nunca, y cada cambio queda anotado.
    - Un solo botón, **Nuevo artículo**: si la línea y la categoría ya existen, los nuevos colores o diseños se suman a ella con su unidad, ancho y tope.
+   - Cada color o diseño muestra código, nombre y **existencia** (lo disponible en anaqueles, más lo que está por ubicar). Con un clic se ven los anaqueles donde está. La abreviatura, la unidad y el tope no se muestran en la lista (se siguen usando y se ven en Editar).
    - Búsqueda rápida, tecleando o con escáner: por código, abreviatura, línea, categoría, color o diseño. Al escanear la etiqueta de un rollo muestra su artículo, su estado y su anaquel.
 2. **Proveedores**.
 3. **Ubicaciones**:
