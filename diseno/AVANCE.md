@@ -1,6 +1,6 @@
 # Avance de la Fase 3 (diseño)
 
-Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 17). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 18). Su fuente es `prototipo-recepcion.html` en esta carpeta.
 
 Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
 
@@ -29,6 +29,7 @@ Los datos que se cargan en el prototipo se guardan solo en el navegador de quien
    - Se guardan los **tiempos** de cada etapa y el total.
 6. **Existencias** (para ventas): lo disponible por artículo o por anaquel, con rollos, cantidad (kilos y metros por separado) y anaqueles. Lo que sigue en muelle o cuarentena aparece aparte como "por ubicar". Se busca tecleando o escaneando un rollo o un anaquel.
 7. **Ajustes de inventario**: ajuste de entrada (sumar a un rollo o crear un rollo nuevo con su código y etiqueta) y de salida (restar; un rollo en cero queda agotado). Cada uno lleva número (AJE-000001, AJS-000001), motivo de una lista que amplía el administrador y aprobación de un gerente distinto de quien lo registró. Las existencias cambian solo al aprobar; un rechazo lleva motivo.
+8. **Traslados entre almacenes** (Almacén principal y Piso de ventas): se escanean los rollos (TRA-000001); al aprobarlo otro gerente salen "en tránsito" y quedan disponibles solo cuando el destino los escanea en su anaquel. Se guardan los tiempos (registrado, salió, recibido). Los anaqueles del piso de ventas llevan prefijo PV- (PV-P01-R01-A01); Ubicaciones y Existencias se filtran por almacén.
 
 Mapa de módulos y decisiones (13/10/2026): https://claude.ai/code/artifact/0db53b74-4b8b-43e5-b6fb-65f008b1dd54 . 10 módulos (con Contabilidad en este sistema); registros en bolívares, todo visible también en dólares a la tasa BCV del día.
 

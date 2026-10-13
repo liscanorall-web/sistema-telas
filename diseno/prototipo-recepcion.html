@@ -257,13 +257,17 @@ tr.sub > td { background: var(--surface-2, transparent); padding-top: 0 }
 <script>
 "use strict";
 // ---------------------------------------------------------------- Personas y permisos de ejemplo
-const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "compra.crear", "etiqueta.imprimir", "ajuste.crear", "ajuste.aprobar", "ajuste.motivos"];
+const TODOS = ["catalogo.ver", "catalogo.editar", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "pieza.ubicar", "compra.crear", "etiqueta.imprimir", "ajuste.crear", "ajuste.aprobar", "ajuste.motivos", "traslado.crear", "traslado.aprobar", "traslado.recibir"];
 const USERS = {
   admin:  { nombre: "Administrador", rol: "Administrador de empresa", permisos: TODOS },
-  ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear"] },
-  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear"] },
-  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "compra.crear", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir", "ajuste.aprobar"] },
+  ana:    { nombre: "Ana Pérez",  rol: "Gerente de recepción"   , permisos: ["catalogo.ver", "recepcion.ver", "recepcion.crear", "recepcion.registrar_pieza", "recepcion.verificar", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear", "traslado.crear", "traslado.recibir"] },
+  carlos: { nombre: "Carlos Ruiz", rol: "Personal de almacén",     permisos: ["catalogo.ver", "recepcion.ver", "recepcion.registrar_pieza", "pieza.ubicar", "etiqueta.imprimir", "ajuste.crear", "traslado.crear", "traslado.recibir"] },
+  luis:   { nombre: "Luis Mora",  rol: "Gerente general",          permisos: ["catalogo.ver", "catalogo.editar", "compra.crear", "recepcion.ver", "recepcion.aprobar", "recepcion.anular", "pieza.liberar", "pieza.resolver_incidencia", "etiqueta.imprimir", "ajuste.aprobar", "traslado.aprobar"] },
 };
+// Almacenes de la empresa. En el sistema real se configuran en Administración; aquí son fijos.
+// Los anaqueles del almacén principal conservan su código (P01-R01-A01); los de otro almacén llevan su prefijo (PV-P01-R01-A01).
+const ALMACENES = [{ id: "AP", nombre: "Almacén principal", prefijo: "" }, { id: "PV", nombre: "Piso de ventas", prefijo: "PV-" }];
+function nombreAlm(id) { return ALMACENES.find(a => a.id === id)?.nombre || id }
 const UN = {
   kg: { nombre: "Kilo",  corto: "kg", campo: "Peso neto", tope: 60 },
   m:  { nombre: "Metro", corto: "m",  campo: "Metraje",   tope: 150 },
@@ -287,25 +291,27 @@ const EST_PIEZA = {
   rechazada:              ["Rechazada", "s-bad"],
   anulada:                ["Anulada", "s-off"],
   agotado:                ["Agotado", "s-off"],
+  en_transito:            ["En tránsito", "s-info"],
 };
 const EVENTO = {
   registrada: "Registrado en recepción", etiqueta: "Etiqueta impresa", incidencia: "Incidencia registrada",
   incidencia_resuelta: "Incidencia resuelta", aprobada: "Recepción aprobada por el gerente", liberada: "Liberado de cuarentena", ubicada: "Trasladado a anaquel",
   rechazada: "Rechazado", anulada: "Anulado",
   ajuste_entrada: "Ajuste de entrada", ajuste_salida: "Ajuste de salida", creada_ajuste: "Creado por ajuste de entrada",
+  traslado_salida: "Salió hacia otro almacén", traslado_entrada: "Recibido en otro almacén",
 };
 
 // ---------------------------------------------------------------- Estado (solo en este navegador)
 const CLAVE = "telas-prototipo-v2";
-const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], ajustes: [], motivos: null, contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0, aje: 0, ajs: 0 } };
-const S = { user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
+const D = { articulos: [], proveedores: [], ubicaciones: [], ocs: [], recs: [], piezas: [], ajustes: [], motivos: null, traslados: [], contador: {}, sec: { art: 0, prov: 0, rec: 0, ubi: 0, oc: 0, aje: 0, ajs: 0, tra: 0 } };
+const S = { traRec: { anaquel: "", rollo: "" }, user: "admin", view: "articulos", rec: null, pieza: null, modal: null,
             artForm: null, provForm: null, ubiForm: null, ocForm: null, recForm: null,
             form: { art: "", peso: "", fab: "" }, ubi: { anaquel: "", rollo: "" }, motivo: "", sel: {} };
 function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(D)) } catch (e) {} }
 function cargar() {
   try { const t = localStorage.getItem(CLAVE); if (t) Object.assign(D, JSON.parse(t)) } catch (e) {}
   D.articulos.forEach(a => { a.linea ||= a.tela; a.categoria ??= ""; a.por ||= "color" });
-  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ajustes ||= []; D.sec.aje ||= 0; D.sec.ajs ||= 0; D.motivos ||= JSON.parse(JSON.stringify(MOTIVOS_BASE)); D.ubicaciones.forEach(x => { x.tipo ||= "anaquel" });
+  D.ubicaciones ||= []; D.sec.ubi ||= 0; D.ocs ||= []; D.sec.oc ||= 0; D.ajustes ||= []; D.sec.aje ||= 0; D.sec.ajs ||= 0; D.motivos ||= JSON.parse(JSON.stringify(MOTIVOS_BASE)); D.ubicaciones.forEach(x => { x.tipo ||= "anaquel"; x.alm ||= "AP" }); D.traslados ||= []; D.sec.tra ||= 0;
   // Datos de la versión anterior: allí la recepción se cerraba al liberar y el rollo ya llevaba su ubicación.
   D.recs.forEach(r => { if (r.estado === "cerrada" && !r.t) piezasDe(r).forEach(p => { if (p.estado === "liberada") p.estado = "disponible" }) });
 }
@@ -614,7 +620,7 @@ function vistaArticulos() {
           <td>${editar ? `<div class="acts-row" style="flex-wrap:nowrap"><button class="btn small" data-act="ed-var" data-id="${a.id}">Editar</button><button class="btn small" data-act="art-activar" data-id="${a.id}">${a.activo ? "Desactivar" : "Activar"}</button></div>` : ""}</td></tr>
           ${ver ? `<tr class="sub"><td colspan="5"><table class="anaq-tabla">
             <thead><tr><th>Anaquel</th><th>Dónde</th><th class="num">Rollos</th><th class="num">Cantidad</th></tr></thead>
-            <tbody>${Object.keys(anaq).sort().map(u => { const x = ubiPorCodigo(u); return `<tr><td class="mono">${esc(u)}</td><td class="note">${x ? esc(nombreUbi(x)) : ""}</td><td class="num">${anaq[u].length}</td><td class="num">${sumaPorUnidad(anaq[u])}</td></tr>` }).join("")}</tbody>
+            <tbody>${Object.keys(anaq).sort().map(u => { const x = ubiPorCodigo(u); return `<tr><td class="mono">${esc(u)}</td><td class="note">${x ? `${esc(nombreAlm(x.alm))} · ${esc(nombreUbi(x))}` : ""}</td><td class="num">${anaq[u].length}</td><td class="num">${sumaPorUnidad(anaq[u])}</td></tr>` }).join("")}</tbody>
             </table></td></tr>` : ""}` }).join("")}
         </tbody></table></div>` : ""}</div>` }).join("")}</div>` : ""}
   </section>` }).join("")}`;
@@ -726,7 +732,10 @@ function vistaProveedores() {
 function ubiPorCodigo(cod) { return D.ubicaciones.find(x => x.codigo === String(cod).trim().toUpperCase()) }
 const TIPO_UBI = { muelle: ["Muelle", "Donde se descarga el contenedor y se registran los rollos"], anaquel: ["Rack", "Cada división del rack es un anaquel, donde se guardan los rollos disponibles para la venta"] };
 const dos = n => String(n).padStart(2, "0");
-function codigoAnaquel(pasillo, rack, div) { return `P${dos(pasillo)}-R${dos(rack)}-A${dos(div)}` }
+function codigoAnaquel(pasillo, rack, div, alm) { return `${ALMACENES.find(a => a.id === (alm || "AP")).prefijo}P${dos(pasillo)}-R${dos(rack)}-A${dos(div)}` }
+function almDe(cod) { return ubiPorCodigo(cod || "")?.alm || "AP" }
+// Las llaves de plegado del almacén principal se quedan como estaban; las de otro almacén llevan su id delante.
+function kAlm(alm, k) { return alm === "AP" ? k : `${alm}-${k}` }
 function nombreUbi(x) { return x.tipo === "anaquel" && x.pasillo ? `Pasillo ${x.pasillo} · Rack ${x.rack} · Anaquel ${x.div}` : x.desc || "" }
 function entero(txt, min, max) { const n = Number(String(txt).trim()); return Number.isInteger(n) && n >= min && n <= max ? n : NaN }
 const ACC_UBI = {
@@ -737,9 +746,9 @@ const ACC_UBI = {
       const cod = f.codigo.trim().toUpperCase();
       if (!/^[A-Z0-9_-]{1,20}$/.test(cod)) throw new Regla("El código del muelle lleva letras, números o guion, sin espacios. Por ejemplo MUELLE-1.");
       if (ubiPorCodigo(cod)) throw new Regla(`El código ${cod} ya existe. Cada ubicación tiene un código único.`);
-      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "muelle", desc: f.desc.trim(), activo: true });
+      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "muelle", alm: S.almUbi || "AP", desc: f.desc.trim(), activo: true });
       S.ubiForm = { ...f, codigo: "", desc: "" };
-      UI.abiertos.muelles = true; guardarUI();
+      UI.abiertos[kAlm(S.almUbi || "AP", "muelles")] = true; guardarUI();
       return `Muelle ${cod} creado.`;
     }
     const pasillo = entero(f.pasillo, 1, 99), rack = entero(f.rack, 1, 99), divs = entero(f.divs, 1, 20);
@@ -748,15 +757,15 @@ const ACC_UBI = {
     if (isNaN(divs)) throw new Regla("Las divisiones del rack son un número del 1 al 20.");
     const nuevos = [], ya = [];
     for (let d = 1; d <= divs; d++) {
-      const cod = codigoAnaquel(pasillo, rack, d);
+      const alm = S.almUbi || "AP", cod = codigoAnaquel(pasillo, rack, d, alm);
       if (ubiPorCodigo(cod)) { ya.push(cod); continue }
-      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "anaquel", pasillo, rack, div: d, desc: f.desc.trim(), activo: true });
+      D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: cod, tipo: "anaquel", alm, pasillo, rack, div: d, desc: f.desc.trim(), activo: true });
       nuevos.push(cod);
     }
     if (!nuevos.length) throw new Regla(`El rack ${rack} del pasillo ${pasillo} ya tiene sus ${divs} anaqueles. Para agregar divisiones, sube el número.`);
     S.ubiForm = { ...f, rack: String(rack + 1), desc: "" };
-    UI.abiertos[`p${pasillo}`] = true; UI.abiertos[`p${pasillo}-r${rack}`] = true; guardarUI();
-    return `Rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""} Imprime sus etiquetas y pégalas en cada división.`;
+    UI.abiertos[kAlm(S.almUbi || "AP", `p${pasillo}`)] = true; UI.abiertos[kAlm(S.almUbi || "AP", `p${pasillo}-r${rack}`)] = true; guardarUI();
+    return `${nombreAlm(S.almUbi || "AP")}, rack ${rack} del pasillo ${pasillo}: ${nuevos.length === 1 ? "1 anaquel creado" : `${nuevos.length} anaqueles creados`} (${nuevos[0]}${nuevos.length > 1 ? ` a ${nuevos.at(-1)}` : ""}).${ya.length ? ` ${ya.length} ya existían.` : ""} Imprime sus etiquetas y pégalas en cada división.`;
   },
   activar(x) { exigir("catalogo.editar"); x.activo = !x.activo; return x.activo ? `${x.codigo} activo de nuevo.` : `${x.codigo} desactivado: ya no se usa en recepciones ni traslados nuevos.` },
 };
@@ -778,7 +787,7 @@ function resumenUbi(xs, racks) {
   return [racks != null ? `${racks} ${racks === 1 ? "rack" : "racks"}` : "", `${xs.length} ${xs.length === 1 ? "anaquel" : "anaqueles"}`, `${rollos} ${rollos === 1 ? "rollo" : "rollos"}`, sin ? `${sin} sin etiqueta` : ""].filter(Boolean).join(" · ");
 }
 function vistaUbicaciones() {
-  const editar = puede("catalogo.editar"), f = S.ubiForm;
+  const editar = puede("catalogo.editar"), f = S.ubiForm, alm = S.almUbi || "AP";
   const rollosEn = cod => D.piezas.filter(p => ["en_cuarentena", "pendiente_autorizacion", "liberada", "disponible"].includes(p.estado) && p.ubic === cod).length;
   const imp = puede("etiqueta.imprimir");
   const fila = x => `<tr class="${x.activo ? "" : "off"}"><td class="mono">${esc(x.codigo)}</td><td>${esc(nombreUbi(x))}${x.desc && x.pasillo ? `<br><span class="note">${esc(x.desc)}</span>` : ""}</td><td class="num">${rollosEn(x.codigo)}</td>
@@ -789,7 +798,7 @@ function vistaUbicaciones() {
   const tabla = (xs, primera) => `<div class="tablewrap"><table><thead><tr><th>Código</th><th>${primera}</th><th class="num">Rollos ahí</th><th>Estado</th><th>Etiqueta</th><th></th></tr></thead><tbody>${xs.map(fila).join("")}</tbody></table></div>`;
   const botonLote = (xs, texto, tit) => imp && xs.length ? `<button class="btn small" data-act="ubi-etq" data-cods="${xs.map(x => esc(x.codigo)).join(" ")}" data-tit="${esc(tit)}">${texto}</button>` : "";
   const orden = (a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true });
-  const muelles = D.ubicaciones.filter(x => x.tipo === "muelle").sort(orden), anaq = D.ubicaciones.filter(x => x.tipo === "anaquel").sort(orden);
+  const muelles = D.ubicaciones.filter(x => x.tipo === "muelle" && x.alm === alm).sort(orden), anaq = D.ubicaciones.filter(x => x.tipo === "anaquel" && x.alm === alm).sort(orden);
   const pasillos = {}; anaq.filter(x => x.pasillo).forEach(x => ((pasillos[x.pasillo] ||= {})[x.rack] ||= []).push(x));
   const sueltos = anaq.filter(x => !x.pasillo);
   return `
@@ -798,6 +807,7 @@ function vistaUbicaciones() {
     <div class="counts">${(() => { const sin = D.ubicaciones.filter(x => x.activo && !x.impresiones); return sin.length && puede("etiqueta.imprimir") ? `<button class="btn" data-act="ubi-etq" data-cods="${sin.sort((a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true })).map(x => esc(x.codigo)).join(" ")}" data-tit="Sin etiqueta">Imprimir ${sin.length} sin etiqueta</button>` : "" })()}
       ${editar && !f ? `<button class="btn" data-act="ubi-nuevo" data-tipo="muelle">Nuevo muelle</button><button class="btn primary" data-act="ubi-nuevo" data-tipo="anaquel">Nuevo rack</button>` : ""}</div>
   </section>
+  <div class="seg" role="group" aria-label="Almacén">${ALMACENES.map(a => `<button type="button" data-act="ubi-alm" data-a="${a.id}" aria-pressed="${a.id === alm}">${esc(a.nombre)} <span class="note">${D.ubicaciones.filter(x => x.alm === a.id).length}</span></button>`).join("")}</div>
   ${f ? `<section class="card"><h2>${f.tipo === "muelle" ? "Nuevo muelle" : "Nuevo rack con sus anaqueles"}</h2>
     <p class="sub">${f.tipo === "muelle" ? "Un código corto, igual al que lleva pegado el muelle." : "Indica el pasillo, el número del rack y cuántas divisiones tiene. Se crea un anaquel por división, con su código listo para la etiqueta del anaquel."}</p>
     <form class="form" id="ubi-form">
@@ -812,17 +822,17 @@ function vistaUbicaciones() {
         <div class="field"><label for="uf-divs">Divisiones (anaqueles)</label><input id="uf-divs" data-uf="divs" inputmode="numeric" value="${esc(f.divs)}" placeholder="Ej. 3" autocomplete="off"></div>
         <div class="field"><label for="uf-desc">Nota (opcional)</label><input id="uf-desc" data-uf="desc" value="${esc(f.desc)}" placeholder="Ej. Rack de telas pesadas" autocomplete="off"></div></div>
         <p class="note" id="uf-prev" style="margin:0">${previaRack(f)}</p>`}
-      <div class="form-foot"><span class="note">Almacén Principal</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">${f.tipo === "muelle" ? "Guardar muelle" : "Crear anaqueles"}</button></div></div>
+      <div class="form-foot"><span class="note">${esc(nombreAlm(alm))}</span><div class="acts-row"><button type="button" class="btn" data-act="ubi-cancelar">Terminar</button><button type="submit" class="btn primary">${f.tipo === "muelle" ? "Guardar muelle" : "Crear anaqueles"}</button></div></div>
     </form></section>` : ""}
   <section class="card">
-    <div class="grupo-head">${plegable("muelles", "Muelles de recepción", `${muelles.length} ${muelles.length === 1 ? "muelle" : "muelles"} · ${muelles.reduce((n, x) => n + rollosEn(x.codigo), 0)} rollos`)}
+    <div class="grupo-head">${plegable(kAlm(alm, "muelles"), "Muelles de recepción", `${muelles.length} ${muelles.length === 1 ? "muelle" : "muelles"} · ${muelles.reduce((n, x) => n + rollosEn(x.codigo), 0)} rollos`)}
       <div class="counts">${botonLote(muelles.filter(x => x.activo), "Etiquetas de los muelles", "Muelles")}</div></div>
-    ${abierto("muelles") ? (muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">Todavía no hay muelles. Hace falta al menos uno para abrir una recepción.</p>`) : ""}</section>
+    ${abierto(kAlm(alm, "muelles")) ? (muelles.length ? tabla(muelles, "Descripción") : `<p class="note" style="margin:0">${alm === "AP" ? "Todavía no hay muelles. Hace falta al menos uno para abrir una recepción." : `El ${esc(nombreAlm(alm))} no tiene muelles. Solo hace falta si allí también se descargan contenedores.`}</p>`) : ""}</section>
   ${Object.keys(pasillos).length > 1 || Object.values(pasillos).some(ps => Object.keys(ps).length > 1) ? `<div class="acts-row" style="justify-content:flex-end"><button class="btn small" data-act="fold-todo" data-abrir="1">Desplegar todo</button><button class="btn small" data-act="fold-todo" data-abrir="0">Plegar todo</button></div>` : ""}
-  ${Object.keys(pasillos).sort((a, b) => a - b).map(p => { const racks = pasillos[p], todos = Object.values(racks).flat(), kp = `p${p}`; return `<section class="card">
+  ${Object.keys(pasillos).sort((a, b) => a - b).map(p => { const racks = pasillos[p], todos = Object.values(racks).flat(), kp = kAlm(alm, `p${p}`); return `<section class="card">
     <div class="grupo-head">${plegable(kp, `Pasillo ${p}`, resumenUbi(todos, Object.keys(racks).length))}
       <div class="counts">${botonLote(todos.filter(x => x.activo), "Etiquetas del pasillo", `Pasillo ${p}`)}</div></div>
-    ${abierto(kp) ? `<div class="racks">${Object.keys(racks).sort((a, b) => a - b).map(r => { const kr = `p${p}-r${r}`; return `<div class="rack">
+    ${abierto(kp) ? `<div class="racks">${Object.keys(racks).sort((a, b) => a - b).map(r => { const kr = kAlm(alm, `p${p}-r${r}`); return `<div class="rack">
       <div class="form-foot">${plegable(kr, `Rack ${r}`, resumenUbi(racks[r]), true)}${botonLote(racks[r].filter(x => x.activo), "Etiquetas del rack", `Pasillo ${p} · Rack ${r}`)}</div>
       ${abierto(kr) ? tabla(racks[r], "Ubicación") : ""}</div>` }).join("")}</div>` : ""}</section>` }).join("")}
   ${sueltos.length ? `<section class="card"><div class="grupo-head"><h2>Anaqueles sin pasillo</h2><span class="note">Creados antes de ordenar por pasillo y rack</span></div>${tabla(sueltos, "Descripción")}</section>` : ""}
@@ -831,7 +841,7 @@ function vistaUbicaciones() {
 function etiquetaUbi(x) {
   const partes = x.pasillo ? [["Pasillo", x.pasillo], ["Rack", x.rack], ["Anaquel", x.div]] : null;
   return `<div class="label ubi" aria-label="Etiqueta de ${esc(x.codigo)}">
-    <div class="l-top"><span>Almacén Principal</span><span>${x.tipo === "muelle" ? "Recepción" : "Ubicación"}</span></div>
+    <div class="l-top"><span>${esc(nombreAlm(x.alm))}</span><span>${x.tipo === "muelle" ? "Recepción" : "Ubicación"}</span></div>
     <div class="u-tipo">${x.tipo === "muelle" ? "Muelle" : "Anaquel"}</div>
     <div class="l-qr">${qrSvg(x.codigo)}</div>
     <div class="u-code">${esc(x.codigo)}</div>
@@ -849,8 +859,8 @@ const ACC_ETQ = {
 };
 function previaRack(f) {
   const p = entero(f.pasillo, 1, 99), r = entero(f.rack, 1, 99), d = entero(f.divs, 1, 20);
-  if (isNaN(p) || isNaN(r) || isNaN(d)) return "Los códigos saldrán así: P01-R01-A01 (pasillo, rack y anaquel).";
-  return `Se crearán ${d === 1 ? "el anaquel" : `${d} anaqueles`}: ${Array.from({ length: d }, (_, k) => codigoAnaquel(p, r, k + 1)).join(", ")}.`;
+  if (isNaN(p) || isNaN(r) || isNaN(d)) return `Los códigos saldrán así: ${codigoAnaquel(1, 1, 1, S.almUbi)} (pasillo, rack y anaquel).`;
+  return `Se crearán ${d === 1 ? "el anaquel" : `${d} anaqueles`}: ${Array.from({ length: d }, (_, k) => codigoAnaquel(p, r, k + 1, S.almUbi)).join(", ")}.`;
 }
 
 // ---------------------------------------------------------------- Módulo 4 · Órdenes de compra
@@ -1118,6 +1128,7 @@ const ACC = {
     if (!x) throw new Regla(codAnaquel?.trim() ? `No existe el anaquel ${codAnaquel.trim().toUpperCase()}. Créalo en Ubicaciones.` : "Primero escanea o escribe el anaquel.");
     if (x.tipo !== "anaquel") throw new Regla(`${x.codigo} es un muelle. Los rollos se trasladan del muelle a un anaquel.`);
     if (!x.activo) throw new Regla(`El anaquel ${x.codigo} está desactivado.`);
+    if (x.alm !== almDe(r.muelle)) throw new Regla(`${x.codigo} es del ${nombreAlm(x.alm)}. Esta recepción se descargó en el ${nombreAlm(almDe(r.muelle))}; para llevar rollos a otro almacén usa un traslado.`);
     const q = String(codRollo || "").trim().toUpperCase();
     if (!q) throw new Regla("Escanea o escribe el código del rollo.");
     const p = D.piezas.find(z => z.codigo === q);
@@ -1348,7 +1359,7 @@ function vistaRecepcion() {
       <div><dt>Documento</dt><dd>${esc(r.doc)}</dd></div>
       ${r.oc ? `<div><dt>Orden de compra</dt><dd><button class="link" data-act="ir" data-v="compras">${ocById(r.oc)?.numero}</button></dd></div>` : ""}
       <div><dt>Fecha de recepción</dt><dd>${dmy(r.fecha)}</dd></div>
-      <div><dt>Almacén</dt><dd>Almacén Principal</dd></div>
+      <div><dt>Almacén</dt><dd>${esc(nombreAlm(almDe(r.muelle)))}</dd></div>
       <div><dt>Muelle</dt><dd>${esc(muelleDe(r))}</dd></div>
       ${r.contenedor ? `<div><dt>Contenedor</dt><dd class="mono">${esc(r.contenedor)}</dd></div>` : ""}
       <div><dt>Abrió</dt><dd>${quien(r.responsable)}</dd></div>
@@ -1366,7 +1377,7 @@ function vistaRecepcion() {
 function panelUbicar(r) {
   if (r.estado !== "por_ubicar") return "";
   const ok = puede("pieza.ubicar"), ps = piezasDe(r), faltan = ps.filter(p => p.estado === "liberada"), hechos = ps.filter(p => p.estado === "disponible").length;
-  const activos = ubisActivas("anaquel");
+  const activos = ubisActivas("anaquel").filter(x => x.alm === almDe(r.muelle));
   return `<div class="card" id="ubicar">
     <h2>Trasladar rollos del muelle a los anaqueles</h2>
     <p class="sub">Escanea el anaquel y después cada rollo que pones en él. El anaquel se queda puesto hasta que escanees otro. Cada rollo trasladado queda disponible para la venta.</p>
@@ -1465,11 +1476,12 @@ function vistaPieza() {
       <div><dt>Cantidad actual</dt><dd class="mono">${cant(cantDe(p), p.un)}</dd></div>
       <div><dt>Dato del fabricante</dt><dd class="mono">${p.fab ? cant(p.fab, p.un) : "No anotado"}</dd></div>
       <div><dt>${p.rec ? "Recepción" : "Origen"}</dt><dd><button class="link" ${r.act}>${r.numero}</button> · ${esc(r.doc)}</dd></div>
-      <div><dt>Ubicación</dt><dd>Almacén Principal · ${esc(p.ubic)}${p.estado === "disponible" ? ` (${esc(nombreUbi(ubiPorCodigo(p.ubic) || {}) || "anaquel")})` : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
+      <div><dt>Ubicación</dt><dd>${p.estado === "en_transito" ? `En tránsito: ${esc(nombreAlm(traById(p.tras).origen))} → ${esc(nombreAlm(traById(p.tras).destino))} (${traById(p.tras).numero})` : `${esc(nombreAlm(almDe(p.ubic)))} · ${esc(p.ubic)}`}${p.estado === "disponible" ? ` (${esc(nombreUbi(ubiPorCodigo(p.ubic) || {}) || "anaquel")})` : ["en_cuarentena", "pendiente_autorizacion", "liberada"].includes(p.estado) ? " (muelle)" : ""}</dd></div>
     </dl>
     ${p.estado === "liberada" ? `<div class="banner warn">Liberado de cuarentena, pero todavía está en el muelle ${esc(p.ubic)}. No se vende hasta trasladarlo a su anaquel.</div>`
       : p.estado === "disponible" ? `<div class="banner ok">Disponible en el anaquel ${esc(p.ubic)}. En picking o venta, escanear esta etiqueta selecciona exactamente este rollo. Si se vende un corte, el rollo conserva este código y baja su cantidad.</div>`
-      : ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) ? `<div class="banner warn">No disponible para venta ni picking hasta que se libere.</div>` : `<div class="banner bad">Fuera del inventario. El código queda en el historial y no se reutiliza.</div>`}
+      : ["en_cuarentena", "pendiente_autorizacion"].includes(p.estado) ? `<div class="banner warn">No disponible para venta ni picking hasta que se libere.</div>`
+      : p.estado === "en_transito" ? `<div class="banner info">Viaja hacia el ${esc(nombreAlm(traById(p.tras).destino))}. No se vende hasta que allí lo escaneen en su anaquel.</div>` : `<div class="banner bad">Fuera del inventario. El código queda en el historial y no se reutiliza.</div>`}
   </section>
   <div class="ficha">
     <div class="card"><h2>Historial</h2><p class="sub">Cada cambio queda registrado con quién y cuándo. No se borra ni se edita.</p>
@@ -1539,16 +1551,17 @@ function cargarEjemplo() {
     add("Gabardina", "Stretch", "color", "m", 150, "97% algodón, 3% elastano", 150, [["Negro", "GAB-001", "GSN"], ["Beige", "GAB-002", "GSB"]]);
   if (!D.proveedores.length) D.proveedores.push({ id: "p" + (++D.sec.prov), codigo: "TEXPAC", nombre: "Textiles del Pacífico", fiscal: "", pais: "China", activo: true });
   if (!D.ubicaciones.length) {
-    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: "MUELLE-1", tipo: "muelle", desc: "Puerta 1, descarga de contenedores", activo: true });
-    [[1, 1], [1, 2]].forEach(([pasillo, rack]) => { for (let div = 1; div <= 3; div++) D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: codigoAnaquel(pasillo, rack, div), tipo: "anaquel", pasillo, rack, div, desc: "", activo: true }) });
+    D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: "MUELLE-1", tipo: "muelle", alm: "AP", desc: "Puerta 1, descarga de contenedores", activo: true });
+    [[1, 1], [1, 2]].forEach(([pasillo, rack]) => { for (let div = 1; div <= 3; div++) D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: codigoAnaquel(pasillo, rack, div), tipo: "anaquel", alm: "AP", pasillo, rack, div, desc: "", activo: true }) });
   }
-  return "Ejemplo cargado: Microfibra con Unicolor (4 colores) y Estampado (2 diseños) por kilo, Gabardina stretch por metro en 2 colores, un proveedor, un muelle y el pasillo 1 con 2 racks de 3 anaqueles.";
+  if (!D.ubicaciones.some(x => x.alm === "PV")) for (let div = 1; div <= 3; div++) D.ubicaciones.push({ id: "u" + (++D.sec.ubi), codigo: codigoAnaquel(1, 1, div, "PV"), tipo: "anaquel", alm: "PV", pasillo: 1, rack: 1, div, desc: "", activo: true });
+  return "Ejemplo cargado: Microfibra con Unicolor (4 colores) y Estampado (2 diseños) por kilo, Gabardina stretch por metro en 2 colores, un proveedor, un muelle y el pasillo 1 con 2 racks de 3 anaqueles en el almacén principal, y un rack de 3 anaqueles en el piso de ventas.";
 }
 
 // ---------------------------------------------------------------- Módulo 6 · Existencias
 // Lo que ventas puede ofrecer: solo los rollos ya trasladados a su anaquel ("Disponible para venta").
 // Lo que sigue en el muelle o en cuarentena se muestra aparte, como "por ubicar": todavía no se vende.
-const EN_PROCESO = ["en_cuarentena", "pendiente_autorizacion", "liberada"];
+const EN_PROCESO = ["en_cuarentena", "pendiente_autorizacion", "liberada", "en_transito"];
 function filtroExistencias(q) {
   const txt = String(q || "").trim().split(/\n/)[0].trim(), up = txt.toUpperCase();
   if (!txt) return { arts: null, anaquel: null, rollo: null, exacto: null, nota: "" };
@@ -1564,7 +1577,7 @@ function sumaPorUnidad(ps) {
 }
 function vistaExistencias() {
   const q = S.buscarEx || "", modo = S.exModo || "articulo", f = filtroExistencias(q);
-  const pasa = p => (!f.arts || f.arts.has(p.art)) && (!f.anaquel || p.ubic === f.anaquel);
+  const pasa = p => (!f.arts || f.arts.has(p.art)) && (!f.anaquel || p.ubic === f.anaquel) && (!S.exAlm || almDePieza(p) === S.exAlm);
   const disp = D.piezas.filter(p => p.estado === "disponible" && pasa(p));
   const proc = f.anaquel ? [] : D.piezas.filter(p => EN_PROCESO.includes(p.estado) && pasa(p));
   const totalDisp = D.piezas.filter(p => p.estado === "disponible").length;
@@ -1599,7 +1612,7 @@ function vistaExistencias() {
     const porAnaquel = {}; disp.forEach(p => (porAnaquel[p.ubic] ||= []).push(p));
     cuerpo = Object.keys(porAnaquel).sort().map(u => { const x = ubiPorCodigo(u), ps = porAnaquel[u], porArt = {};
       ps.forEach(p => (porArt[p.art] ||= []).push(p));
-      return `<section class="card"><div class="grupo-head"><div><h2 class="mono">${esc(u)}</h2><span class="note">${x ? esc(nombreUbi(x)) : ""}</span></div>
+      return `<section class="card"><div class="grupo-head"><div><h2 class="mono">${esc(u)}</h2><span class="note">${x ? `${esc(nombreAlm(x.alm))} · ${esc(nombreUbi(x))}` : ""}</span></div>
         <div class="counts"><span class="pill s-ok">${rollos(ps.length)}</span></div></div>
         <div class="tablewrap"><table>
           <thead><tr><th>Artículo</th><th class="num">Rollos</th><th class="num">Cantidad</th><th>Rollos</th></tr></thead>
@@ -1611,7 +1624,7 @@ function vistaExistencias() {
   return `
   <section class="page-head">
     <div><div class="eyebrow">Paso 6 · Ventas</div><h1>Existencias</h1>
-      <p>Lo que se puede vender: cada rollo que ya está en su anaquel, con su cantidad actual. Lo que sigue en el muelle o en cuarentena aparece aparte, como “por ubicar”.</p></div>
+      <p>Lo que se puede vender: cada rollo que ya está en su anaquel, con su cantidad actual. Lo que sigue en el muelle, en cuarentena o en tránsito entre almacenes aparece aparte, como “por ubicar”.</p></div>
   </section>
   ${vacio ? `<section class="card empty"><h2>Todavía no hay existencias</h2>
       <p>Un rollo aparece aquí cuando se recibe, y queda disponible para la venta cuando se traslada a su anaquel.</p>
@@ -1627,6 +1640,7 @@ function vistaExistencias() {
     <div><dt>Por ubicar</dt><dd>${proc.length ? `${rollos(proc.length)} · ${sumaPorUnidad(proc)}` : "—"}</dd></div>
   </dl></section>
   <div class="form-foot">
+    <div class="seg" role="group" aria-label="Almacén"><button type="button" data-act="ex-alm" data-a="" aria-pressed="${!S.exAlm}">Todos</button>${ALMACENES.map(a => `<button type="button" data-act="ex-alm" data-a="${a.id}" aria-pressed="${S.exAlm === a.id}">${esc(a.nombre)}</button>`).join("")}</div>
     <div class="seg" role="group" aria-label="Ver existencias"><button type="button" data-act="ex-modo" data-m="articulo" aria-pressed="${modo === "articulo"}">Por artículo</button><button type="button" data-act="ex-modo" data-m="anaquel" aria-pressed="${modo === "anaquel"}">Por anaquel</button></div>
     ${modo === "articulo" && !f.anaquel ? `<button class="btn small" data-act="ex-todos" aria-pressed="${!!S.exTodos}">${S.exTodos ? "Ocultar artículos sin existencia" : "Ver también artículos sin existencia"}</button>` : ""}
   </div>
@@ -1648,7 +1662,7 @@ function rolloParaAjuste(q) {
   if (!cod) throw new Regla("Escanea o escribe el código del rollo.");
   if (!p) throw new Regla(`No existe el rollo ${cod}.`);
   if (p.estado !== "disponible") throw new Regla(`El rollo ${cod} está ${EST_PIEZA[p.estado][0].toLowerCase()}: solo se ajustan rollos ubicados en su anaquel.`);
-  const otro = ajustePendienteDe(cod); if (otro) throw new Regla(`El rollo ${cod} ya está en el ${otro.numero}, por aprobar.`);
+  const otro = docPendienteDe(cod); if (otro) throw new Regla(`El rollo ${cod} ya está en el ${otro.numero}, por aprobar.`);
   return p;
 }
 const ACC_AJ = {
@@ -1812,6 +1826,150 @@ function vistaAjustes() {
       <div class="scan"><input data-motivo="${t}" value="${esc((S.motivoNuevo || {})[t] || "")}" placeholder="Nuevo motivo" aria-label="Nuevo motivo de ${TIPO_AJ[t][0].toLowerCase()}" autocomplete="off" style="font-family:var(--f-body)"><button class="btn small" data-act="aj-motivo" data-tipo="${t}">Agregar</button></div></div>`).join("")}</div></section>` : ""}`;
 }
 
+// ---------------------------------------------------------------- Módulo 8 · Traslados entre almacenes
+// El rollo sale del anaquel de origen al aprobarse el traslado, viaja "en tránsito" y vuelve a estar disponible
+// solo cuando alguien del almacén de destino lo escanea en su nuevo anaquel. Así se sabe si algo se pierde en el camino.
+const EST_TRA = { por_aprobar: ["Por aprobar", "s-warn"], en_transito: ["En tránsito", "s-info"], recibido: ["Recibido completo", "s-ok"], rechazado: ["Rechazado", "s-bad"] };
+function traById(id) { return D.traslados.find(x => x.id === id) }
+function almDePieza(p) { return p.estado === "en_transito" && p.tras ? traById(p.tras).destino : almDe(p.ubic) }
+function docPendienteDe(cod) {
+  return D.ajustes.find(x => x.estado === "pendiente" && x.lineas.some(l => l.cod === cod)) || D.traslados.find(x => x.estado === "por_aprobar" && x.lineas.some(l => l.cod === cod));
+}
+function abrirFormTraslado() { const o = ALMACENES[0].id; S.traForm = { origen: o, destino: ALMACENES.find(a => a.id !== o).id, nota: "", rollo: "", lineas: [] } }
+const ACC_TRA = {
+  agregar() {
+    const f = S.traForm, cod = String(f.rollo || "").trim().split(/\n/)[0].trim().toUpperCase(), p = D.piezas.find(x => x.codigo === cod);
+    if (!cod) throw new Regla("Escanea o escribe el código del rollo.");
+    if (!p) throw new Regla(`No existe el rollo ${cod}.`);
+    if (p.estado !== "disponible") throw new Regla(`El rollo ${cod} está ${EST_PIEZA[p.estado][0].toLowerCase()}: solo se trasladan rollos ubicados en su anaquel.`);
+    if (almDe(p.ubic) !== f.origen) throw new Regla(`El rollo ${cod} está en el ${nombreAlm(almDe(p.ubic))}, no en el ${nombreAlm(f.origen)}.`);
+    const otro = docPendienteDe(cod); if (otro) throw new Regla(`El rollo ${cod} ya está en el ${otro.numero}, por aprobar.`);
+    if (f.lineas.includes(cod)) throw new Regla(`${cod} ya está en este traslado.`);
+    f.lineas.push(cod); f.rollo = "";
+  },
+  guardar() {
+    exigir("traslado.crear");
+    const f = S.traForm;
+    if (f.origen === f.destino) throw new Regla("El almacén de destino debe ser distinto del de origen.");
+    if (!f.lineas.length) throw new Regla("Escanea al menos un rollo.");
+    const t = { id: "t" + (D.traslados.length + 1), numero: `TRA-${String(++D.sec.tra).padStart(6, "0")}`, origen: f.origen, destino: f.destino, nota: f.nota.trim(),
+                fecha: hoyISO(), hora: hoy(), por: S.user, estado: "por_aprobar",
+                lineas: f.lineas.map(cod => { const p = D.piezas.find(x => x.codigo === cod); return { cod, art: p.art, cant: cantDe(p), desde: p.ubic, recibido: null } }), t: {} };
+    marcar(t, "registrado");
+    D.traslados.push(t); S.traForm = null;
+    return `${t.numero} registrado. Los rollos siguen disponibles en el ${nombreAlm(t.origen)} hasta que un gerente lo apruebe.`;
+  },
+  aprobar(t) {
+    exigir("traslado.aprobar");
+    if (t.estado !== "por_aprobar") throw new Regla(`${t.numero} ya no está por aprobar.`);
+    if (t.por === S.user) throw new Regla("Quien registra un traslado no lo aprueba. Debe aprobarlo otro gerente.");
+    t.lineas.forEach(l => { const p = D.piezas.find(x => x.codigo === l.cod);
+      if (p.estado !== "disponible" || p.ubic !== l.desde) throw new Regla(`${l.cod} ya no está en ${l.desde}. Rechaza el traslado y regístralo de nuevo.`) });
+    t.lineas.forEach(l => { const p = D.piezas.find(x => x.codigo === l.cod);
+      evento(p, "traslado_salida", "disponible", "en_transito", `${t.numero} · ${p.ubic} (${nombreAlm(t.origen)}) → ${nombreAlm(t.destino)}`);
+      p.estado = "en_transito"; p.tras = t.id; l.cant = cantDe(p) });
+    t.estado = "en_transito"; t.decision = { por: S.user, hora: hoy() }; marcar(t, "despachado");
+    return `${t.numero} aprobado: ${t.lineas.length} ${t.lineas.length === 1 ? "rollo sale" : "rollos salen"} en tránsito hacia el ${nombreAlm(t.destino)}. Allí se escanean al llegar.`;
+  },
+  rechazar(t, motivo) {
+    exigir("traslado.aprobar");
+    if (t.estado !== "por_aprobar") throw new Regla(`${t.numero} ya no está por aprobar.`);
+    if (!String(motivo || "").trim()) throw new Regla("Escribe por qué se rechaza.");
+    t.estado = "rechazado"; t.decision = { por: S.user, hora: hoy(), motivo: motivo.trim() };
+    return `${t.numero} rechazado. Los rollos no se movieron y el número no se reutiliza.`;
+  },
+  recibir(t, codRollo, codAnaquel) {
+    exigir("traslado.recibir");
+    if (t.estado !== "en_transito") throw new Regla(`${t.numero} no está en tránsito.`);
+    const x = ubiPorCodigo(codAnaquel || "");
+    if (!x) throw new Regla(codAnaquel?.trim() ? `No existe el anaquel ${codAnaquel.trim().toUpperCase()}.` : "Primero escanea el anaquel de destino.");
+    if (x.tipo !== "anaquel" || !x.activo) throw new Regla(`${x.codigo} no es un anaquel activo.`);
+    if (x.alm !== t.destino) throw new Regla(`${x.codigo} es del ${nombreAlm(x.alm)}. Este traslado va al ${nombreAlm(t.destino)}.`);
+    const q = String(codRollo || "").trim().toUpperCase(), l = t.lineas.find(z => z.cod === q);
+    if (!q) throw new Regla("Escanea el rollo.");
+    if (!l) throw new Regla(`El rollo ${q} no viene en el ${t.numero}.`);
+    if (l.recibido) throw new Regla(`El rollo ${q} ya se recibió en ${l.recibido.anaquel}.`);
+    const p = D.piezas.find(z => z.codigo === q);
+    evento(p, "traslado_entrada", "en_transito", "disponible", `${t.numero} · ${nombreAlm(t.destino)} · ${x.codigo}`);
+    p.ubic = x.codigo; p.estado = "disponible"; delete p.tras; S.traRec.rollo = "";
+    l.recibido = { anaquel: x.codigo, hora: hoy(), por: S.user };
+    const faltan = t.lineas.filter(z => !z.recibido).length;
+    if (!faltan) { t.estado = "recibido"; marcar(t, "recibido") }
+    return faltan ? `${q} recibido en ${x.codigo}. Faltan ${faltan}.` : `${q} recibido en ${x.codigo}. Era el último: ${t.numero} recibido completo en ${duracion(t.t.despachado.ms, t.t.recibido.ms)} desde que salió.`;
+  },
+};
+function duracion(a, b) { const s = Math.max(0, Math.round((b - a) / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? `${h} h ${m} min` : m ? `${m} min` : `${s} s` }
+function formTraslado() {
+  const f = S.traForm, op = sel => ALMACENES.map(a => `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(a.nombre)}</option>`).join("");
+  return `<section class="card"><h2>Nuevo traslado entre almacenes</h2>
+    <p class="sub">Escanea los rollos que salen. Siguen disponibles en el origen hasta que un gerente apruebe el traslado; desde ahí viajan en tránsito hasta que el destino los escanea.</p>
+    <form class="form" id="tra-form">
+      <div class="row2">
+        <div class="field"><label for="tf-origen">Sale de</label><select id="tf-origen" data-tf="origen" ${f.lineas.length ? "disabled" : ""}>${op(f.origen)}</select></div>
+        <div class="field"><label for="tf-destino">Va a</label><select id="tf-destino" data-tf="destino">${op(f.destino)}</select></div>
+        <div class="field"><label for="tf-nota">Nota (opcional)</label><input id="tf-nota" data-tf="nota" value="${esc(f.nota)}" placeholder="Ej. reponer exhibición" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="tf-rollo">Rollo</label>
+        <div class="scan"><input id="tf-rollo" class="big" value="${esc(f.rollo)}" placeholder="Escanea el rollo" autocomplete="off" style="text-transform:uppercase"><button type="button" class="btn" data-act="tf-agregar">Agregar</button></div></div>
+      ${f.lineas.length ? `<div class="tablewrap"><table><thead><tr><th>Rollo</th><th>Artículo</th><th>Anaquel actual</th><th class="num">Cantidad</th><th></th></tr></thead><tbody>
+        ${f.lineas.map((c, i) => { const p = D.piezas.find(x => x.codigo === c), a = art(p.art); return `<tr><td class="mono">${c}</td><td class="art"><span class="mono">${esc(a.codigo)}</span> · ${esc(nombreArt(a))}</td><td class="mono">${esc(p.ubic)}</td><td class="num">${cant(cantDe(p), p.un)}</td>
+          <td><button type="button" class="btn small" data-act="tf-quitar" data-row="${i}">Quitar</button></td></tr>` }).join("")}</tbody></table></div>` : ""}
+      <div class="form-foot"><span class="note">${f.lineas.length} ${f.lineas.length === 1 ? "rollo" : "rollos"} · ${sumaPorUnidad(f.lineas.map(c => D.piezas.find(x => x.codigo === c)))}</span>
+        <div class="acts-row"><button type="button" class="btn" data-act="tf-cancelar">Cancelar</button><button type="button" class="btn primary" data-act="tf-guardar">Enviar a aprobación</button></div></div>
+    </form></section>`;
+}
+function panelRecibir(t) {
+  const ok = puede("traslado.recibir"), faltan = t.lineas.filter(l => !l.recibido), destinos = ubisActivas("anaquel").filter(x => x.alm === t.destino);
+  return `<div class="card" style="margin-top:12px;box-shadow:none">
+    <h3 style="margin:0 0 4px">Recibir en el ${esc(nombreAlm(t.destino))}</h3>
+    <p class="sub">Escanea el anaquel y después cada rollo que pones en él. Cada rollo recibido queda disponible para la venta en este almacén.</p>
+    ${!destinos.length ? `<p class="banner warn">El ${esc(nombreAlm(t.destino))} no tiene anaqueles. <button class="link" data-act="ir" data-v="ubicaciones">Créalos en Ubicaciones</button>.</p>` : ""}
+    <form class="form" id="tra-rec-form" data-id="${t.id}">
+      <div class="row2">
+        <div class="field"><label for="tr-anaquel">Anaquel de destino</label><input id="tr-anaquel" class="big" list="lista-anaq-tra" value="${esc(S.traRec.anaquel)}" placeholder="Ej. ${esc(destinos[0]?.codigo || "PV-P01-R01-A01")}" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}>
+          <datalist id="lista-anaq-tra">${destinos.map(x => `<option value="${esc(x.codigo)}">${esc(nombreUbi(x))}</option>`).join("")}</datalist></div>
+        <div class="field"><label for="tr-rollo">Rollo</label><input id="tr-rollo" class="big" value="${esc(S.traRec.rollo)}" placeholder="Escanea la etiqueta" autocomplete="off" style="text-transform:uppercase" ${ok ? "" : "disabled"}></div>
+      </div>
+      <div class="form-foot"><span class="next-code">Recibidos <b>${t.lineas.length - faltan.length}</b> de <b>${t.lineas.length}</b>${faltan.length ? ` · falta: <b>${faltan[0].cod}</b>` : ""}</span>
+        ${ok ? `<button class="btn primary" type="submit">Recibir rollo</button>` : `<span class="note">${u().nombre} no recibe traslados.</span>`}</div>
+    </form></div>`;
+}
+function tarjetaTraslado(t) {
+  const k = `tra-${t.id}`, vivo = ["por_aprobar", "en_transito"].includes(t.estado), ver = vivo || abierto(k), aprobar = t.estado === "por_aprobar" && puede("traslado.aprobar"), propio = t.por === S.user;
+  const tiempos = [["registrado", "Registrado"], ["despachado", "Salió (aprobado)"], ["recibido", "Recibido completo"]].filter(([x]) => t.t[x]);
+  return `<section class="card">
+    <div class="grupo-head">${plegable(k, `${t.numero} · ${esc(nombreAlm(t.origen))} → ${esc(nombreAlm(t.destino))}`, `${t.lineas.length} ${t.lineas.length === 1 ? "rollo" : "rollos"} · ${sumaPorUnidad(t.lineas.map(l => ({ un: art(l.art).un, actual: l.cant })))} · ${t.hora} · ${quien(t.por)}`, true, vivo)}
+      <div class="counts"><span class="pill ${EST_TRA[t.estado][1]}">${EST_TRA[t.estado][0]}</span></div></div>
+    ${ver ? `${t.nota ? `<p style="margin:8px 0 0">${esc(t.nota)}</p>` : ""}
+    <div class="tablewrap"><table><thead><tr><th>Rollo</th><th>Artículo</th><th>Sale de</th><th class="num">Cantidad</th><th>Llegó a</th></tr></thead><tbody>
+      ${t.lineas.map(l => { const a = art(l.art); return `<tr><td><button class="link mono" data-act="ficha" data-cod="${l.cod}">${l.cod}</button></td><td class="art"><span class="mono">${esc(a.codigo)}</span> · ${esc(nombreArt(a))}</td>
+        <td class="mono">${esc(l.desde)}</td><td class="num">${cant(l.cant, a.un)}</td>
+        <td>${l.recibido ? `<span class="mono">${esc(l.recibido.anaquel)}</span> <span class="note">· ${l.recibido.hora}</span>` : t.estado === "en_transito" ? `<span class="pill s-info">En tránsito</span>` : "—"}</td></tr>` }).join("")}
+    </tbody></table></div>
+    ${tiempos.length > 1 ? `<p class="note" style="margin:10px 0 0">${tiempos.map(([x, n]) => `${n}: ${new Date(t.t[x].ms).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })} (${quien(t.t[x].por)})`).join(" · ")}${t.t.recibido ? ` · En camino: ${duracion(t.t.despachado.ms, t.t.recibido.ms)}` : ""}</p>` : ""}
+    ${t.decision?.motivo ? `<p class="banner bad" style="margin-top:12px">Rechazado por ${quien(t.decision.por)} el ${t.decision.hora}: ${esc(t.decision.motivo)}</p>` : ""}
+    ${t.estado === "por_aprobar" ? aprobar && !propio ? `<div class="form-foot" style="margin-top:12px">
+        <input data-rech-tra="${t.id}" value="${esc((S.rechTra || {})[t.id] || "")}" placeholder="Si lo rechazas, escribe por qué" aria-label="Motivo del rechazo de ${t.numero}" style="flex:1 1 240px;min-width:0">
+        <div class="acts-row"><button class="btn danger" data-act="tra-rechazar" data-id="${t.id}">Rechazar</button><button class="btn primary" data-act="tra-aprobar" data-id="${t.id}">Aprobar y despachar</button></div></div>`
+      : `<p class="note" style="margin:12px 0 0">${propio && aprobar ? "Lo registraste tú: debe aprobarlo otro gerente." : "Espera la aprobación de un gerente. Los rollos siguen en su anaquel."}</p>` : ""}
+    ${t.estado === "en_transito" ? panelRecibir(t) : ""}` : ""}
+  </section>`;
+}
+function vistaTraslados() {
+  const crear = puede("traslado.crear"), vivos = D.traslados.filter(t => ["por_aprobar", "en_transito"].includes(t.estado)), hechos = D.traslados.filter(t => !vivos.includes(t));
+  return `
+  <section class="page-head">
+    <div><div class="eyebrow">Paso 8 · Inventario</div><h1>Traslados entre almacenes</h1>
+      <p>Mover rollos del ${esc(ALMACENES[0].nombre)} al ${esc(ALMACENES[1].nombre)} o al revés. El rollo viaja en tránsito y queda disponible solo cuando el destino lo escanea en su anaquel.</p></div>
+    <div class="counts">${crear && !S.traForm ? `<button class="btn primary" data-act="tra-nuevo" ${D.piezas.some(p => p.estado === "disponible") ? "" : "disabled"}>Nuevo traslado</button>` : !crear ? `<span class="note">${u().nombre} no registra traslados.</span>` : ""}</div>
+  </section>
+  ${S.traForm ? formTraslado() : ""}
+  ${vivos.length ? `<h2 class="sec-t">En curso (${vivos.length})</h2>${vivos.slice().reverse().map(tarjetaTraslado).join("")}` : ""}
+  ${hechos.length ? `<h2 class="sec-t">Historial</h2>${hechos.slice().reverse().map(tarjetaTraslado).join("")}` : ""}
+  ${!D.traslados.length && !S.traForm ? `<section class="card empty"><h2>Todavía no hay traslados</h2><p>Cuando el ${esc(ALMACENES[1].nombre)} necesite mercancía, registra aquí los rollos que salen del ${esc(ALMACENES[0].nombre)}.</p></section>` : ""}`;
+}
+
 // ---------------------------------------------------------------- Dibujo y eventos
 const $app = document.getElementById("app"), $modal = document.getElementById("modal"), $toast = document.getElementById("toast"), $tabs = document.getElementById("tabs");
 let toastTimer;
@@ -1821,9 +1979,9 @@ function toast(msg, error) {
 }
 function modulo() { return S.view === "recepcion" || S.view === "pieza" ? "recepciones" : S.view }
 function render() {
-  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length], ["existencias", "6", "Existencias", D.piezas.filter(p => p.estado === "disponible").length], ["ajustes", "7", "Ajustes", D.ajustes.length]];
+  const mods = [["articulos", "1", "Artículos", D.articulos.length], ["proveedores", "2", "Proveedores", D.proveedores.length], ["ubicaciones", "3", "Ubicaciones", D.ubicaciones.length], ["compras", "4", "Compras", D.ocs.length], ["recepciones", "5", "Recepciones", D.recs.length], ["existencias", "6", "Existencias", D.piezas.filter(p => p.estado === "disponible").length], ["ajustes", "7", "Ajustes", D.ajustes.length], ["traslados", "8", "Traslados", D.traslados.length]];
   $tabs.innerHTML = mods.map(([k, n, t, c]) => `<button class="tab" data-act="ir" data-v="${k}" ${modulo() === k ? 'aria-current="page"' : ""}><span class="step">${n}</span>${t}<span class="n">${c}</span></button>`).join("");
-  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, ajustes: vistaAjustes, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
+  const vista = { articulos: vistaArticulos, proveedores: vistaProveedores, ubicaciones: vistaUbicaciones, compras: vistaCompras, recepciones: vistaRecepciones, existencias: vistaExistencias, ajustes: vistaAjustes, traslados: vistaTraslados, recepcion: vistaRecepcion, pieza: vistaPieza }[S.view];
   $app.innerHTML = vista() + `<div class="foot"><span class="note">Prototipo. Lo que crees aquí se guarda solo en este navegador, no en la base real.</span><button class="link" data-act="borrar">Empezar de cero</button></div>`;
   $modal.innerHTML = modal();
 }
@@ -1856,6 +2014,15 @@ document.addEventListener("click", e => {
     case "ed-var": { const a = art(el.dataset.id); S.modal = { tipo: "ed-var", id: a.id, color: a.color }; render(); return document.getElementById("em-var")?.select() }
     case "em-set": S.modal[el.dataset.k] = el.dataset.v; return render();
     case "em-ok": { const m = S.modal; return hacer(() => { const msg = m.tipo === "ed-linea" ? ACC_EDIT.linea(m.viejo, m.linea) : m.tipo === "ed-cat" ? ACC_EDIT.categoria(m.tela, m) : ACC_EDIT.variante(art(m.id), m.color); S.modal = null; return msg }) }
+    case "ubi-alm": S.almUbi = el.dataset.a; S.ubiForm = null; return render();
+    case "ex-alm": S.exAlm = el.dataset.a; return render();
+    case "tra-nuevo": abrirFormTraslado(); render(); return document.getElementById("tf-rollo")?.focus();
+    case "tf-agregar": { hacer(ACC_TRA.agregar); const i = document.getElementById("tf-rollo"); i?.focus(); i?.select(); return }
+    case "tf-quitar": S.traForm.lineas.splice(+el.dataset.row, 1); return render();
+    case "tf-cancelar": S.traForm = null; return render();
+    case "tf-guardar": return hacer(ACC_TRA.guardar);
+    case "tra-aprobar": return hacer(() => ACC_TRA.aprobar(traById(el.dataset.id)));
+    case "tra-rechazar": return hacer(() => ACC_TRA.rechazar(traById(el.dataset.id), (S.rechTra || {})[el.dataset.id]));
     case "aj-abrir": abrirFormAjuste(el.dataset.tipo); render(); document.getElementById(el.dataset.tipo === "salida" ? "aj-rollo" : "aj-motivo")?.focus(); return;
     case "aj-agregar": { hacer(ACC_AJ.agregarRollo); const i = document.getElementById("aj-rollo"); i?.focus(); i?.select(); return }
     case "aj-nuevo": hacer(ACC_AJ.agregarNuevo); return document.querySelector('[data-ajn="cant"]')?.focus();
@@ -1888,7 +2055,7 @@ document.addEventListener("click", e => {
       const deArt = k => k.startsWith("tela-") || k.startsWith("linea-");
       Object.keys(UI.abiertos).filter(k => art === deArt(k)).forEach(k => delete UI.abiertos[k]);
       if (abrir && art) { const vistas = new Set(); D.articulos.forEach(a => { [["linea", lineaDe(a)], ["tela", a.tela]].forEach(([n, v]) => { if (!vistas.has(n + v)) { vistas.add(n + v); UI.abiertos[`${n}-${a.id}`] = true } }) }) }
-      if (abrir && !art) { UI.abiertos.muelles = true; D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[`p${x.pasillo}`] = true; UI.abiertos[`p${x.pasillo}-r${x.rack}`] = true }) }
+      if (abrir && !art) { ALMACENES.forEach(a => { UI.abiertos[kAlm(a.id, "muelles")] = true }); D.ubicaciones.filter(x => x.pasillo).forEach(x => { UI.abiertos[kAlm(x.alm, `p${x.pasillo}`)] = true; UI.abiertos[kAlm(x.alm, `p${x.pasillo}-r${x.rack}`)] = true }) }
       guardarUI(); return render() }
     case "ubi-etq": abrirEtiquetasUbi(el.dataset.cods.split(" "), el.dataset.tit); return render();
     case "ubi-etq-ok": return hacer(() => { const msg = ACC_ETQ.imprimir(S.modal.codigos); S.modal = null; return msg });
@@ -1925,6 +2092,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && S.modal) { S.modal = null; render() }
+  else if (e.key === "Enter" && e.target.id === "tf-rollo") { e.preventDefault(); hacer(ACC_TRA.agregar); const i = document.getElementById("tf-rollo"); i?.focus(); i?.select() }
   else if (e.key === "Enter" && e.target.id === "aj-rollo") { e.preventDefault(); hacer(ACC_AJ.agregarRollo); const i = document.getElementById("aj-rollo"); i?.focus(); i?.select() }
   else if (e.key === "Enter" && e.target.dataset?.ajn && e.target.tagName === "INPUT") { e.preventDefault(); hacer(ACC_AJ.agregarNuevo); document.querySelector('[data-ajn="cant"]')?.focus() }
   else if (e.key === "Enter" && e.target.dataset?.motivo) { e.preventDefault(); const t = e.target.dataset.motivo; hacer(() => ACC_AJ.motivo(t, (S.motivoNuevo || {})[t])); document.querySelector(`[data-motivo="${t}"]`)?.focus() }
@@ -1951,6 +2119,11 @@ document.addEventListener("input", e => {
   if (ds.pf) { S.provForm[ds.pf] = t.value; return }
   if (ds.em) { S.modal[ds.em] = t.value; return }
   if (ds.aj) { S.ajForm[ds.aj] = t.value; return }
+  if (ds.tf) { S.traForm[ds.tf] = t.value; if (ds.tf === "origen" && S.traForm.destino === t.value) { S.traForm.destino = ALMACENES.find(a => a.id !== t.value).id; render() } return }
+  if (t.id === "tf-rollo") { S.traForm.rollo = t.value; return }
+  if (ds.rechTra) { (S.rechTra ||= {})[ds.rechTra] = t.value; return }
+  if (t.id === "tr-anaquel") { S.traRec.anaquel = t.value; return }
+  if (t.id === "tr-rollo") { S.traRec.rollo = t.value; return }
   if (t.id === "aj-rollo") { S.ajForm.rollo = t.value; return }
   if (ds.ajn) { S.ajForm.nuevo[ds.ajn] = t.value; if (ds.ajn === "art") { render(); document.querySelector('[data-ajn="cant"]')?.focus() } return }
   if (ds.rech) { (S.rech ||= {})[ds.rech] = t.value; return }
@@ -1987,7 +2160,12 @@ document.addEventListener("submit", e => {
   const id = e.target.id;
   if (id === "art-form") return hacer(ACC_ART.guardar);
   if (id === "prov-form") return hacer(ACC_PROV.guardar);
-  if (id === "aj-form") return;
+  if (id === "aj-form" || id === "tra-form") return;
+  if (id === "tra-rec-form") {
+    // Escáner: tras leer el anaquel, el foco pasa al rollo; tras cada rollo, vuelve al rollo.
+    if (document.activeElement?.id === "tr-anaquel") { const r = document.getElementById("tr-rollo"); r?.focus(); r?.select(); return }
+    hacer(() => ACC_TRA.recibir(traById(e.target.dataset.id), S.traRec.rollo, S.traRec.anaquel));
+    const i = document.getElementById(S.traRec.anaquel.trim() ? "tr-rollo" : "tr-anaquel"); i?.focus(); return }
   if (id === "ex-buscar-form") { const i = document.getElementById("ex-buscar"); S.buscarEx = i.value; render();
     const hit = document.getElementById("ex-hit"); if (hit) hit.scrollIntoView({ block: "center" });
     const j = document.getElementById("ex-buscar"); j?.focus(); j?.select(); return }
