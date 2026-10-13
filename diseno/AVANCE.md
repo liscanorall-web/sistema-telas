@@ -1,6 +1,6 @@
 # Avance de la Fase 3 (diseño)
 
-Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 14). Su fuente es `prototipo-recepcion.html` en esta carpeta.
+Corte del 12/10/2026. Prototipo navegable: https://claude.ai/artifact/KwMXpXgQvGqmaiFBW7pwtT (versión 15). Su fuente es `prototipo-recepcion.html` en esta carpeta.
 
 Los datos que se cargan en el prototipo se guardan solo en el navegador de quien lo usa. No están en la base de datos real.
 
@@ -10,6 +10,7 @@ Los datos que se cargan en el prototipo se guardan solo en el navegador de quien
    - El código y la abreviatura se proponen solos y nunca se repiten.
    - La unidad (kilo o metro), el ancho y el tope van por categoría.
    - Línea, categoría y nombre del color o diseño se pueden editar. El código y la abreviatura no cambian nunca, y cada cambio queda anotado.
+   - Un solo botón, **Nuevo artículo**: si la línea y la categoría ya existen, los nuevos colores o diseños se suman a ella con su unidad, ancho y tope.
    - Búsqueda rápida, tecleando o con escáner: por código, abreviatura, línea, categoría, color o diseño. Al escanear la etiqueta de un rollo muestra su artículo, su estado y su anaquel.
 2. **Proveedores**.
 3. **Ubicaciones**:
@@ -25,6 +26,7 @@ Los datos que se cargan en el prototipo se guardan solo en el navegador de quien
    - Al final, el **traslado** a anaqueles por escaneo: primero el anaquel, luego cada rollo. Solo entonces el rollo queda disponible para la venta.
    - La recepción se cierra con el último traslado.
    - Se guardan los **tiempos** de cada etapa y el total.
+6. **Existencias** (para ventas): lo disponible por artículo o por anaquel, con rollos, cantidad (kilos y metros por separado) y anaqueles. Lo que sigue en muelle o cuarentena aparece aparte como "por ubicar". Se busca tecleando o escaneando un rollo o un anaquel.
 
 Pasillos, racks, líneas y categorías se muestran plegados. Lo que cada persona despliega se recuerda en su navegador.
 
@@ -34,5 +36,4 @@ Pasillos, racks, líneas y categorías se muestran plegados. Lo que cada persona
 - **Base de datos**: pasar a la base lo validado. Eso incluye línea y categoría (ajustando la migración 0007), compras, muelles, pasillo/rack/anaquel, traslado, estado "disponible" y tiempos.
 - **PR #1**: lo fusiona Richard. Después se aplica la migración en Supabase.
 - **Ideas propuestas**:
-  - pestaña de Existencias (lo disponible por artículo y anaquel, para ventas);
   - etiqueta de anaquel más chica, si hace falta.
